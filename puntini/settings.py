@@ -1,108 +1,97 @@
 """Settings and configuration management for the agent system.
 
 This module provides centralized configuration management with support for
-environment variables, configuration files, and sensible defaults.
+a structured JSON configuration file.
 """
 
-import os
+import json
 from typing import Any, Dict, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 
 @dataclass
 class LangfuseConfig:
     """Configuration for Langfuse observability."""
-    
-    public_key: str = field(default_factory=lambda: os.getenv("LANGFUSE_PUBLIC_KEY", ""))
-    secret_key: str = field(default_factory=lambda: os.getenv("LANGFUSE_SECRET_KEY", ""))
-    host: str = field(default_factory=lambda: os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"))
+    public_key: str = ""
+    secret_key: str = ""
+    host: str = "https://cloud.langfuse.com"
 
 
 @dataclass
 class LLMConfig:
     """Configuration for LLM providers."""
-    
-    openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
-    anthropic_api_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
-    model_name: str = field(default_factory=lambda: os.getenv("MODEL_NAME", "gpt-4"))
-    model_temperature: float = field(default_factory=lambda: float(os.getenv("MODEL_TEMPERATURE", "0.0")))
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    model_name: str = "gpt-4"
+    model_temperature: float = 0.0
 
 
 @dataclass
 class Neo4jConfig:
     """Configuration for Neo4j database."""
-    
-    uri: str = field(default_factory=lambda: os.getenv("NEO4J_URI", "bolt://localhost:7687"))
-    username: str = field(default_factory=lambda: os.getenv("NEO4J_USERNAME", "neo4j"))
-    password: str = field(default_factory=lambda: os.getenv("NEO4J_PASSWORD", "password"))
+    uri: str = "bolt://localhost:7687"
+    username: str = "neo4j"
+    password: str = "password"
 
 
 @dataclass
 class AgentConfig:
     """Configuration for agent behavior."""
-    
-    max_retries: int = field(default_factory=lambda: int(os.getenv("MAX_RETRIES", "3")))
-    checkpointer_type: str = field(default_factory=lambda: os.getenv("CHECKPOINTER_TYPE", "memory"))
-    tracer_type: str = field(default_factory=lambda: os.getenv("TRACER_TYPE", "console"))
+    max_retries: int = 3
+    checkpointer_type: str = "memory"
+    tracer_type: str = "console"
 
 
 @dataclass
 class DevelopmentConfig:
     """Configuration for development and debugging."""
-    
-    debug: bool = field(default_factory=lambda: os.getenv("DEBUG", "false").lower() == "true")
-    log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
+    debug: bool = False
+    log_level: str = "INFO"
 
 
 class Settings:
     """Centralized settings management for the agent system.
     
     This class provides a single point of configuration management,
-    loading settings from environment variables with sensible defaults.
+    loading settings from a JSON file.
     """
     
     def __init__(self, config_file: Optional[str] = None):
         """Initialize settings with optional configuration file.
         
         Args:
-            config_file: Optional path to configuration file (.env format).
-                        If not provided, will look for .env in current directory.
+            config_file: Optional path to a JSON configuration file.
+                        If not provided, will look for `config.json` in the current directory.
         """
-        self.config_file = config_file or ".env"
-        self._load_config()
+        self.config_file = config_file or "config.json"
         
-        # Initialize configuration sections
-        self.langfuse = LangfuseConfig()
-        self.llm = LLMConfig()
-        self.neo4j = Neo4jConfig()
-        self.agent = AgentConfig()
-        self.dev = DevelopmentConfig()
+        config = self._load_config()
+
+        # Initialize configuration sections from JSON file, with dataclass defaults
+        self.langfuse = LangfuseConfig(**config.get('langfuse', {}))
+        self.llm = LLMConfig(**config.get('llm', {}))
+        self.neo4j = Neo4jConfig(**config.get('neo4j', {}))
+        self.agent = AgentConfig(**config.get('agent', {}))
+        self.dev = DevelopmentConfig(**config.get('dev', {}))
     
-    def _load_config(self) -> None:
-        """Load configuration from file if it exists.
+    def _load_config(self) -> Dict[str, Any]:
+        """Load configuration from JSON file if it exists.
         
-        Loads .env format configuration files and sets environment variables.
-        This allows for local configuration overrides.
+        Returns an empty dictionary if the file doesn't exist or is invalid.
         """
         config_path = Path(self.config_file)
         if config_path.exists():
-            self._load_env_file(config_path)
-    
-    def _load_env_file(self, file_path: Path) -> None:
-        """Load environment variables from a file.
-        
-        Args:
-            file_path: Path to the .env file to load.
-        """
-        with open(file_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    # Only set if not already in environment
-                    if key not in os.environ:
-                        os.environ[key] = value
+            with open(config_path, 'r') as f:
+                try:
+                    content = f.read()
+                    if not content:
+                        return {}
+                    return json.loads(content)
+                except json.JSONDecodeError:
+                    # Handle empty or invalid JSON file
+                    return {}
+        return {}
     
     @property
     def model_name(self) -> str:
