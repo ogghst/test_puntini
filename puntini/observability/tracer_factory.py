@@ -4,8 +4,9 @@ This module provides factory functions for creating different
 types of tracer implementations for observability.
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from ..interfaces.tracer import Tracer
+from ..settings import Settings
 
 
 class TracerConfig:
@@ -22,11 +23,12 @@ class TracerConfig:
         self.config = kwargs
 
 
-def make_tracer(cfg: TracerConfig) -> Tracer:
+def make_tracer(cfg: TracerConfig, settings: Optional[Settings] = None) -> Tracer:
     """Create a tracer instance based on configuration.
     
     Args:
         cfg: Tracer configuration.
+        settings: Optional Settings instance. If not provided, uses global settings.
         
     Returns:
         Configured tracer instance.
@@ -36,7 +38,7 @@ def make_tracer(cfg: TracerConfig) -> Tracer:
     """
     if cfg.kind == "langfuse":
         from ..observability.langfuse_tracer import LangfuseTracer
-        return LangfuseTracer(cfg.config)
+        return LangfuseTracer(cfg.config, settings)
     elif cfg.kind == "noop":
         from ..observability.noop_tracer import NoOpTracer
         return NoOpTracer()
@@ -64,4 +66,14 @@ def create_console_tracer() -> Tracer:
         Console tracer instance.
     """
     cfg = TracerConfig("console")
+    return make_tracer(cfg)
+
+
+def create_langfuse_tracer() -> Tracer:
+    """Create a langfuse tracer for development.
+    
+    Returns:
+        Langfuse tracer instance.
+    """
+    cfg = TracerConfig("langfuse")
     return make_tracer(cfg)

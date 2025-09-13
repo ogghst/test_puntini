@@ -6,7 +6,7 @@ with natural language goals.
 """
 
 import asyncio
-from puntini import create_simple_agent, create_console_tracer
+from puntini import create_simple_agent, create_langfuse_tracer
 
 
 async def main():
@@ -15,7 +15,7 @@ async def main():
     
     # Create agent and tracer
     agent = create_simple_agent()
-    tracer = create_console_tracer()
+    tracer = create_langfuse_tracer()
     
     # Define a simple goal
     goal = "Create a node called 'Example' with a property 'type' set to 'demo'"

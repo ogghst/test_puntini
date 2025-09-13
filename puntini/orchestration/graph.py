@@ -13,8 +13,84 @@ from .state import State
 from .checkpointer import create_checkpointer, get_checkpoint_config
 
 
+def route_after_parse_goal(state: State) -> str:
+    """Route after parsing goal based on complexity and parsing results.
+    
+    Args:
+        state: Current agent state with parsed goal information.
+        
+    Returns:
+        The next node to execute.
+    """
+    result = state.get("result", {})
+    
+    # If parsing failed, route to diagnose
+    if result.get("status") == "error":
+        return "diagnose"
+    
+    # If parsing succeeded, use the determined next step
+    return state.get("current_step", "plan_step")
+
+
+def route_after_evaluate(state: State) -> str:
+    """Route after evaluation based on step results.
+    
+    Args:
+        state: Current agent state with evaluation results.
+        
+    Returns:
+        The next node to execute.
+    """
+    result = state.get("result", {})
+    status = result.get("status", "unknown")
+    retry_count = state.get("retry_count", 0)
+    max_retries = state.get("max_retries", 3)
+    
+    if status == "success":
+        # Check if goal is complete
+        if result.get("goal_complete", False):
+            return "answer"
+        else:
+            return "plan_step"  # Continue with next step
+    elif status == "error" and retry_count < max_retries:
+        return "diagnose"
+    else:
+        return "escalate"
+
+
+def route_after_diagnose(state: State) -> str:
+    """Route after diagnosis based on error classification.
+    
+    Args:
+        state: Current agent state with diagnosis results.
+        
+    Returns:
+        The next node to execute.
+    """
+    result = state.get("result", {})
+    error_context = state.get("_error_context", {})
+    
+    error_type = error_context.get("type", "unknown")
+    
+    if error_type == "identical":
+        # Identical error, escalate
+        return "escalate"
+    elif error_type == "random":
+        # Random error, retry
+        return "plan_step"
+    elif error_type == "systematic":
+        # Systematic error, escalate for human input
+        return "escalate"
+    else:
+        # Unknown error, escalate
+        return "escalate"
+
+
 def parse_goal(state: State) -> Dict[str, Any]:
     """Parse the goal and extract structured information.
+    
+    This function delegates to the actual parse_goal implementation
+    in the nodes module to maintain separation of concerns.
     
     Args:
         state: Current agent state.
@@ -22,11 +98,8 @@ def parse_goal(state: State) -> Dict[str, Any]:
     Returns:
         Updated state with parsed goal information.
     """
-    # TODO: Implement goal parsing logic
-    return {
-        "current_step": "plan_step",
-        "current_attempt": 1
-    }
+    from ..nodes.parse_goal import parse_goal as parse_goal_impl
+    return parse_goal_impl(state)
 
 
 def plan_step(state: State) -> Dict[str, Any]:
@@ -166,11 +239,45 @@ def create_agent_graph(checkpointer: BaseCheckpointSaver | None = None) -> State
     
     # Add edges
     workflow.add_edge(START, "parse_goal")
-    workflow.add_edge("parse_goal", "plan_step")
+    
+    # Conditional routing after parse_goal
+    workflow.add_conditional_edges(
+        "parse_goal",
+        route_after_parse_goal,
+        {
+            "plan_step": "plan_step",
+            "route_tool": "route_tool", 
+            "diagnose": "diagnose"
+        }
+    )
+    
+    # Direct edges for planning and routing
     workflow.add_edge("plan_step", "route_tool")
     workflow.add_edge("route_tool", "call_tool")
-    workflow.add_edge("call_tool", "evaluate")
-    workflow.add_edge("diagnose", "escalate")
+    
+    # Conditional routing after evaluate
+    workflow.add_conditional_edges(
+        "evaluate",
+        route_after_evaluate,
+        {
+            "plan_step": "plan_step",
+            "diagnose": "diagnose",
+            "escalate": "escalate",
+            "answer": "answer"
+        }
+    )
+    
+    # Conditional routing after diagnose
+    workflow.add_conditional_edges(
+        "diagnose",
+        route_after_diagnose,
+        {
+            "plan_step": "plan_step",
+            "escalate": "escalate"
+        }
+    )
+    
+    # Direct edges for escalation and completion
     workflow.add_edge("escalate", "answer")
     workflow.add_edge("answer", END)
     

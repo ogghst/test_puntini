@@ -5,7 +5,7 @@ a structured JSON configuration file.
 """
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,15 +16,74 @@ class LangfuseConfig:
     public_key: str = ""
     secret_key: str = ""
     host: str = "https://cloud.langfuse.com"
+    debug: bool = False
+    tracing_enabled: bool = True
+    sample_rate: float = 1.0
+    environment: str = "default"
+    release: str = ""
+    session_id: str = ""
+    user_id: str = ""
+
+
+@dataclass
+class ModelInfo:
+    """Model capability information."""
+    family: str = ""
+    vision: bool = False
+    function_calling: bool = False
+    json_output: bool = False
+    structured_output: bool = False
+
+
+@dataclass
+class LLMProviderConfig:
+    """Configuration for a single LLM provider."""
+    name: str = ""
+    type: str = ""  # "openai", "anthropic", "ollama", etc.
+    api_key: str = ""
+    model_name: str = ""
+    temperature: float = 0.0
+    max_tokens: int = 2000
+    enabled: bool = True
+    base_url: str = ""  # Custom API endpoint
+    model_info: Optional[ModelInfo] = None
+    
+    def __post_init__(self):
+        """Initialize model_info if not provided."""
+        if self.model_info is None:
+            self.model_info = ModelInfo()
 
 
 @dataclass
 class LLMConfig:
-    """Configuration for LLM providers."""
-    openai_api_key: str = ""
-    anthropic_api_key: str = ""
-    model_name: str = "gpt-4"
-    model_temperature: float = 0.0
+    """Configuration for LLM providers using a list-based approach."""
+    default_llm: str = "openai-gpt4"
+    providers: List[LLMProviderConfig] = None
+    
+    def __post_init__(self):
+        """Initialize LLM provider configurations after dataclass creation."""
+        if self.providers is None:
+            # Default providers if none specified
+            self.providers = [
+                LLMProviderConfig(
+                    name="openai-gpt4",
+                    type="openai",
+                    api_key="",
+                    model_name="gpt-4o-mini",
+                    temperature=0.1,
+                    max_tokens=2000,
+                    enabled=False
+                ),
+                LLMProviderConfig(
+                    name="anthropic-sonnet",
+                    type="anthropic",
+                    api_key="",
+                    model_name="claude-3-5-sonnet-latest",
+                    temperature=0.0,
+                    max_tokens=2000,
+                    enabled=False
+                )
+            ]
 
 
 @dataclass
@@ -41,6 +100,17 @@ class AgentConfig:
     max_retries: int = 3
     checkpointer_type: str = "memory"
     tracer_type: str = "console"
+
+
+@dataclass
+class LoggingConfig:
+    """Configuration for logging system."""
+    log_level: str = "DEBUG"
+    console_logging: bool = False
+    max_bytes: int = 10485760  # 10MB
+    backup_count: int = 5
+    log_file: str = "backend.log"
+    logs_path: str = "logs"
 
 
 @dataclass
@@ -70,9 +140,30 @@ class Settings:
 
         # Initialize configuration sections from JSON file, with dataclass defaults
         self.langfuse = LangfuseConfig(**config.get('langfuse', {}))
-        self.llm = LLMConfig(**config.get('llm', {}))
+        
+        # Initialize LLM config with list-based providers
+        llm_config = config.get('llm', {})
+        self.llm = LLMConfig(**llm_config)
+        
+        # Override providers list if specified in JSON
+        if 'providers' in llm_config:
+            self.llm.providers = []
+            for provider_config in llm_config['providers']:
+                # Handle model_info separately if present
+                model_info = None
+                if 'model_info' in provider_config:
+                    model_info = ModelInfo(**provider_config.pop('model_info'))
+                
+                # Create provider config
+                provider = LLMProviderConfig(**provider_config)
+                if model_info:
+                    provider.model_info = model_info
+                
+                self.llm.providers.append(provider)
+        
         self.neo4j = Neo4jConfig(**config.get('neo4j', {}))
         self.agent = AgentConfig(**config.get('agent', {}))
+        self.logging = LoggingConfig(**config.get('logging', {}))
         self.dev = DevelopmentConfig(**config.get('dev', {}))
     
     def _load_config(self) -> Dict[str, Any]:
@@ -96,7 +187,8 @@ class Settings:
     @property
     def model_name(self) -> str:
         """Get the configured model name."""
-        return self.llm.model_name
+        default_llm = self.get_default_llm_config()
+        return default_llm.model_name if default_llm else ""
     
     @property
     def max_retries(self) -> int:
@@ -117,6 +209,88 @@ class Settings:
     def debug(self) -> bool:
         """Get debug mode status."""
         return self.dev.debug
+    
+    def get_llm_config(self, name: str) -> Optional[LLMProviderConfig]:
+        """Get LLM configuration by name.
+        
+        Args:
+            name: The name of the LLM provider.
+            
+        Returns:
+            LLMProviderConfig if found, None otherwise.
+        """
+        for provider in self.llm.providers:
+            if provider.name == name:
+                return provider
+        return None
+    
+    def get_available_llms(self) -> List[str]:
+        """Get list of available (enabled) LLM providers.
+        
+        Returns:
+            List of available LLM provider names.
+        """
+        available = []
+        for provider in self.llm.providers:
+            if provider.enabled:
+                available.append(provider.name)
+        return available
+    
+    def get_default_llm_config(self) -> Optional[LLMProviderConfig]:
+        """Get the default LLM configuration.
+        
+        Returns:
+            LLMProviderConfig for the default LLM, or None if not available.
+        """
+        default_config = self.get_llm_config(self.llm.default_llm)
+        if default_config and default_config.enabled:
+            return default_config
+        
+        # Fallback to first available LLM
+        available = self.get_available_llms()
+        if available:
+            return self.get_llm_config(available[0])
+        
+        return None
+    
+    def get_llms_by_type(self, provider_type: str) -> List[LLMProviderConfig]:
+        """Get all LLM configurations of a specific type.
+        
+        Args:
+            provider_type: The type of provider (e.g., "openai", "anthropic").
+            
+        Returns:
+            List of LLMProviderConfig instances matching the type.
+        """
+        return [provider for provider in self.llm.providers if provider.type == provider_type]
+    
+    def add_llm_provider(self, provider_config: LLMProviderConfig) -> None:
+        """Add a new LLM provider configuration.
+        
+        Args:
+            provider_config: The LLM provider configuration to add.
+        """
+        # Check if provider with same name already exists
+        existing = self.get_llm_config(provider_config.name)
+        if existing:
+            raise ValueError(f"LLM provider with name '{provider_config.name}' already exists")
+        
+        self.llm.providers.append(provider_config)
+    
+    def remove_llm_provider(self, name: str) -> bool:
+        """Remove an LLM provider configuration.
+        
+        Args:
+            name: The name of the LLM provider to remove.
+            
+        Returns:
+            True if provider was removed, False if not found.
+        """
+        for i, provider in enumerate(self.llm.providers):
+            if provider.name == name:
+                del self.llm.providers[i]
+                return True
+        return False
     
     def get_graph_store_config(self) -> Dict[str, Any]:
         """Get graph store configuration.
@@ -151,13 +325,21 @@ class Settings:
         Returns:
             Dictionary with tool registry configuration.
         """
+        default_llm = self.get_default_llm_config()
+        if not default_llm:
+            return {
+                "kind": "standard",
+                "llm_config": {}
+            }
+        
         return {
             "kind": "standard",
             "llm_config": {
-                "model_name": self.model_name,
-                "temperature": self.llm.model_temperature,
-                "openai_api_key": self.llm.openai_api_key,
-                "anthropic_api_key": self.llm.anthropic_api_key,
+                "model_name": default_llm.model_name,
+                "temperature": default_llm.temperature,
+                "api_key": default_llm.api_key,
+                "base_url": default_llm.base_url,
+                "provider_type": default_llm.type,
             }
         }
     
@@ -173,8 +355,30 @@ class Settings:
                 "public_key": self.langfuse.public_key,
                 "secret_key": self.langfuse.secret_key,
                 "host": self.langfuse.host,
+                "debug": self.langfuse.debug,
+                "tracing_enabled": self.langfuse.tracing_enabled,
+                "sample_rate": self.langfuse.sample_rate,
+                "environment": self.langfuse.environment,
+                "release": self.langfuse.release,
+                "session_id": self.langfuse.session_id,
+                "user_id": self.langfuse.user_id,
             },
             "debug": self.debug,
+        }
+    
+    def get_logging_config(self) -> Dict[str, Any]:
+        """Get logging configuration.
+        
+        Returns:
+            Dictionary with logging configuration.
+        """
+        return {
+            "log_level": self.logging.log_level,
+            "console_logging": self.logging.console_logging,
+            "max_bytes": self.logging.max_bytes,
+            "backup_count": self.logging.backup_count,
+            "log_file": self.logging.log_file,
+            "logs_path": self.logging.logs_path,
         }
     
     def get_agent_config(self) -> Dict[str, Any]:
@@ -188,6 +392,7 @@ class Settings:
             "context_manager": self.get_context_manager_config(),
             "tool_registry": self.get_tool_registry_config(),
             "tracer": self.get_tracer_config(),
+            "logging": self.get_logging_config(),
             "checkpointer": {
                 "checkpointer_type": self.checkpointer_type,
             }
@@ -209,9 +414,10 @@ class Settings:
         if self.checkpointer_type not in valid_checkpointers:
             raise ValueError(f"Invalid checkpointer type: {self.checkpointer_type}. Must be one of {valid_checkpointers}")
         
-        # Validate model temperature
-        if not 0.0 <= self.llm.model_temperature <= 2.0:
-            raise ValueError(f"Model temperature must be between 0.0 and 2.0, got {self.llm.model_temperature}")
+        # Validate model temperature for all providers
+        for provider in self.llm.providers:
+            if not 0.0 <= provider.temperature <= 2.0:
+                raise ValueError(f"Model temperature must be between 0.0 and 2.0, got {provider.temperature} for provider {provider.name}")
         
         # Validate max retries
         if self.max_retries < 0:
@@ -233,12 +439,36 @@ class Settings:
                 "public_key": self.langfuse.public_key,
                 "secret_key": "***" if self.langfuse.secret_key else "",  # Redact secret
                 "host": self.langfuse.host,
+                "debug": self.langfuse.debug,
+                "tracing_enabled": self.langfuse.tracing_enabled,
+                "sample_rate": self.langfuse.sample_rate,
+                "environment": self.langfuse.environment,
+                "release": self.langfuse.release,
+                "session_id": self.langfuse.session_id,
+                "user_id": self.langfuse.user_id,
             },
             "llm": {
-                "model_name": self.llm.model_name,
-                "model_temperature": self.llm.model_temperature,
-                "openai_api_key": "***" if self.llm.openai_api_key else "",  # Redact secret
-                "anthropic_api_key": "***" if self.llm.anthropic_api_key else "",  # Redact secret
+                "default_llm": self.llm.default_llm,
+                "providers": [
+                    {
+                        "name": provider.name,
+                        "type": provider.type,
+                        "model_name": provider.model_name,
+                        "temperature": provider.temperature,
+                        "max_tokens": provider.max_tokens,
+                        "enabled": provider.enabled,
+                        "base_url": provider.base_url,
+                        "api_key": "***" if provider.api_key else "",  # Redact secret
+                        "model_info": {
+                            "family": provider.model_info.family,
+                            "vision": provider.model_info.vision,
+                            "function_calling": provider.model_info.function_calling,
+                            "json_output": provider.model_info.json_output,
+                            "structured_output": provider.model_info.structured_output,
+                        } if provider.model_info else {}
+                    }
+                    for provider in self.llm.providers
+                ]
             },
             "neo4j": {
                 "uri": self.neo4j.uri,
@@ -249,6 +479,14 @@ class Settings:
                 "max_retries": self.agent.max_retries,
                 "checkpointer_type": self.agent.checkpointer_type,
                 "tracer_type": self.agent.tracer_type,
+            },
+            "logging": {
+                "log_level": self.logging.log_level,
+                "console_logging": self.logging.console_logging,
+                "max_bytes": self.logging.max_bytes,
+                "backup_count": self.logging.backup_count,
+                "log_file": self.logging.log_file,
+                "logs_path": self.logging.logs_path,
             },
             "dev": {
                 "debug": self.dev.debug,

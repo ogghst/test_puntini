@@ -5,9 +5,16 @@ configurations and options.
 """
 
 import click
+import sys
+from pathlib import Path
 from typing import Any, Dict
-from .agents.agent_factory import create_simple_agent, create_agent_with_components
-from .settings import settings
+
+# Add the project root to the Python path for direct execution
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from puntini.agents.agent_factory import create_simple_agent, create_agent_with_components
+from puntini.settings import settings
 
 
 @click.group()
@@ -34,11 +41,14 @@ def run(goal: str, config: str | None, verbose: bool, tracer: str):
     
     # Create agent
     if tracer == "noop":
-        from .observability.tracer_factory import create_noop_tracer
+        from puntini.observability.tracer_factory import create_noop_tracer
         tracer_instance = create_noop_tracer()
     elif tracer == "console":
-        from .observability.tracer_factory import create_console_tracer
+        from puntini.observability.tracer_factory import create_console_tracer
         tracer_instance = create_console_tracer()
+    elif tracer == "langfuse":
+        from puntini.observability.tracer_factory import create_langfuse_tracer
+        tracer_instance = create_langfuse_tracer()
     else:
         click.echo(f"❌ Unsupported tracer type: {tracer}")
         return
@@ -67,7 +77,12 @@ def run(goal: str, config: str | None, verbose: bool, tracer: str):
     # Run the agent
     try:
         with tracer_instance.start_trace("agent-execution") as trace:
-            result = agent.invoke(initial_state)
+            # Create config with thread_id for checkpointer
+            import uuid
+            thread_id = str(uuid.uuid4())
+            config = {"configurable": {"thread_id": thread_id}}
+            
+            result = agent.invoke(initial_state, config=config)
             click.echo(f"✅ Agent completed successfully!")
             if verbose:
                 click.echo(f"Result: {result}")
@@ -105,12 +120,12 @@ def test():
         click.echo("✅ Agent creation: PASSED")
         
         # Test tracer creation
-        from .observability.tracer_factory import create_console_tracer
-        tracer = create_console_tracer()
+        from puntini.observability.tracer_factory import create_langfuse_tracer
+        tracer = create_langfuse_tracer()
         click.echo("✅ Tracer creation: PASSED")
         
         # Test graph store creation
-        from .graph.graph_store_factory import create_memory_graph_store
+        from puntini.graph.graph_store_factory import create_memory_graph_store
         graph_store = create_memory_graph_store()
         click.echo("✅ Graph store creation: PASSED")
         

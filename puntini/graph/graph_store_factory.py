@@ -42,7 +42,7 @@ def make_graph_store(cfg: GraphStoreConfig) -> GraphStore:
         # TODO: Implement Neo4j graph store
         raise NotImplementedError("Neo4j graph store not yet implemented")
     elif cfg.kind == "memory":
-        from graph.in_memory_graph import InMemoryGraphStore
+        from .in_memory_graph import InMemoryGraphStore
         return InMemoryGraphStore()
     else:
         raise ValueError(f"Unsupported graph store type: {cfg.kind}")

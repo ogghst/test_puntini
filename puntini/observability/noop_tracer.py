@@ -76,3 +76,21 @@ class NoOpContextManager(AbstractContextManager):
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit the context."""
         pass
+    
+    def log_io(self, input_data: Any, output_data: Any) -> None:
+        """Log input/output data for this context.
+        
+        Args:
+            input_data: Input data to log (ignored).
+            output_data: Output data to log (ignored).
+        """
+        pass
+    
+    def log_decision(self, decision: str, context: dict[str, Any]) -> None:
+        """Log a decision point in this context.
+        
+        Args:
+            decision: Decision that was made (ignored).
+            context: Context information for the decision (ignored).
+        """
+        pass
