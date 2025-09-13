@@ -199,7 +199,7 @@ Return a GoalSpec object with all extracted information."""),
         # Handle validation errors (these are usually not retryable)
         error_msg = f"Goal validation failed: {str(e)}"
         
-        logger.error(
+        logger.exception(
             "Goal validation failed",
             extra={
                 "error": str(e),
@@ -236,7 +236,7 @@ Return a GoalSpec object with all extracted information."""),
         else:
             error_classification = "unknown_error"
         
-        logger.error(
+        logger.exception(
             "Goal parsing failed with exception",
             extra={
                 "error": str(e),

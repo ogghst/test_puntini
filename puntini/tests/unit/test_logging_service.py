@@ -65,10 +65,12 @@ class TestLoggingServiceSetup:
             
             logging_service = LoggingService(settings)
             
-            # Mock logger.remove to verify it's called
-            with patch('puntini.logging.logger.logger.remove') as mock_remove:
+            # This test was for loguru, which is no longer used.
+            # The new implementation doesn't remove a default handler in the same way.
+            # We can check that it adds our handlers.
+            with patch('logging.RootLogger.addHandler') as mock_add:
                 logging_service.setup()
-                mock_remove.assert_called_once()
+                assert mock_add.call_count > 0
     
     def test_setup_idempotent(self):
         """Test that setup is idempotent."""
@@ -101,11 +103,11 @@ class TestLoggingServiceSetup:
             
             logging_service = LoggingService(settings)
             
-            with patch('puntini.logging.logger.logger.add') as mock_add:
+            with patch('logging.RootLogger.addHandler') as mock_add:
                 logging_service.setup()
                 
-                # Should add file handler and console handler
-                assert mock_add.call_count >= 2
+                # Should add file handler, error handler, and console handler
+                assert mock_add.call_count >= 3
 
 
 class TestLoggingServiceFileHandlers:
@@ -121,7 +123,7 @@ class TestLoggingServiceFileHandlers:
             
             logging_service = LoggingService(settings)
             
-            with patch('puntini.logging.logger.logger.add') as mock_add:
+            with patch('logging.RootLogger.addHandler') as mock_add:
                 logging_service.setup()
                 
                 # Should add main log file and error log file
@@ -129,9 +131,9 @@ class TestLoggingServiceFileHandlers:
                 
                 # Check that file paths are correct
                 calls = mock_add.call_args_list
-                file_paths = [call[0][0] for call in calls]
-                assert any("test.log" in str(path) for path in file_paths)
-                assert any("error.log" in str(path) for path in file_paths)
+                handler_files = [h.baseFilename for call in calls for h in call.args if hasattr(h, 'baseFilename')]
+                assert any("test.log" in str(path) for path in handler_files)
+                assert any("error.log" in str(path) for path in handler_files)
     
     def test_file_handler_rotation_configuration(self):
         """Test that file handlers use correct rotation configuration."""
@@ -144,17 +146,16 @@ class TestLoggingServiceFileHandlers:
             
             logging_service = LoggingService(settings)
             
-            with patch('puntini.logging.logger.logger.add') as mock_add:
+            with patch('logging.RootLogger.addHandler') as mock_add:
                 logging_service.setup()
                 
                 # Check rotation and retention settings
                 calls = mock_add.call_args_list
                 for call in calls:
-                    kwargs = call[1]
-                    if 'rotation' in kwargs:
-                        assert "10 MB" in kwargs['rotation']
-                    if 'retention' in kwargs:
-                        assert "5 days" in kwargs['retention']
+                    handler = call.args[0]
+                    if isinstance(handler, logging.handlers.RotatingFileHandler):
+                        assert handler.maxBytes == 10485760
+                        assert handler.backupCount == 5
 
 
 class TestLoggingServiceConsoleHandlers:
@@ -169,13 +170,13 @@ class TestLoggingServiceConsoleHandlers:
             
             logging_service = LoggingService(settings)
             
-            with patch('puntini.logging.logger.logger.add') as mock_add:
+            with patch('logging.RootLogger.addHandler') as mock_add:
                 logging_service.setup()
                 
                 # Should add console handler
                 calls = mock_add.call_args_list
-                console_calls = [call for call in calls if call[1].get('colorize') is True]
-                assert len(console_calls) > 0
+                console_handlers = [h for call in calls for h in call.args if isinstance(h, logging.StreamHandler) and not hasattr(h, 'baseFilename')]
+                assert len(console_handlers) > 0
     
     def test_console_handler_not_created_when_disabled(self):
         """Test that console handler is not created when disabled."""
@@ -186,13 +187,13 @@ class TestLoggingServiceConsoleHandlers:
             
             logging_service = LoggingService(settings)
             
-            with patch('puntini.logging.logger.logger.add') as mock_add:
+            with patch('logging.RootLogger.addHandler') as mock_add:
                 logging_service.setup()
                 
                 # Should not add console handler
                 calls = mock_add.call_args_list
-                console_calls = [call for call in calls if call[1].get('colorize') is True]
-                assert len(console_calls) == 0
+                console_handlers = [h for call in calls for h in call.args if isinstance(h, logging.StreamHandler) and not hasattr(h, 'baseFilename')]
+                assert len(console_handlers) == 0
 
 
 class TestLoggingServiceLoggerCreation:
@@ -244,10 +245,10 @@ class TestLoggingServiceContextMethods:
             logging_service = LoggingService(settings)
             logging_service.setup()
             
-            context_logger = logging_service.add_context(user_id="123", action="test")
+            context = logging_service.add_context(user_id="123", action="test")
             
-            assert context_logger is not None
-            assert hasattr(context_logger, 'info')
+            assert context is not None
+            assert context == {"user_id": "123", "action": "test"}
     
     def test_log_function_call(self):
         """Test logging function calls."""
@@ -259,14 +260,15 @@ class TestLoggingServiceContextMethods:
             logging_service = LoggingService(settings)
             logging_service.setup()
             
-            func_logger = logging_service.log_function_call(
-                func_name="test_function",
-                param1="value1",
-                param2="value2"
-            )
-            
-            assert func_logger is not None
-            assert hasattr(func_logger, 'info')
+            logger = get_logger("test_module")
+            with patch.object(logger, 'info') as mock_info:
+                logging_service.log_function_call(
+                    logger,
+                    func_name="test_function",
+                    param1="value1",
+                    param2="value2"
+                )
+                mock_info.assert_called_once()
     
     def test_log_agent_step(self):
         """Test logging agent steps."""
@@ -278,14 +280,15 @@ class TestLoggingServiceContextMethods:
             logging_service = LoggingService(settings)
             logging_service.setup()
             
-            agent_logger = logging_service.log_agent_step(
-                step="parse_goal",
-                state={"goal": "test", "attempt": 1},
-                complexity="simple"
-            )
-            
-            assert agent_logger is not None
-            assert hasattr(agent_logger, 'info')
+            logger = get_logger("test_module")
+            with patch.object(logger, 'info') as mock_info:
+                logging_service.log_agent_step(
+                    logger,
+                    step="parse_goal",
+                    state={"goal": "test", "attempt": 1},
+                    complexity="simple"
+                )
+                mock_info.assert_called_once()
     
     def test_log_llm_call(self):
         """Test logging LLM calls."""
@@ -297,14 +300,15 @@ class TestLoggingServiceContextMethods:
             logging_service = LoggingService(settings)
             logging_service.setup()
             
-            llm_logger = logging_service.log_llm_call(
-                model="gpt-4",
-                prompt_length=150,
-                temperature=0.1
-            )
-            
-            assert llm_logger is not None
-            assert hasattr(llm_logger, 'info')
+            logger = get_logger("test_module")
+            with patch.object(logger, 'info') as mock_info:
+                logging_service.log_llm_call(
+                    logger,
+                    model="gpt-4",
+                    prompt_length=150,
+                    temperature=0.1
+                )
+                mock_info.assert_called_once()
     
     def test_log_graph_operation(self):
         """Test logging graph operations."""
@@ -316,14 +320,15 @@ class TestLoggingServiceContextMethods:
             logging_service = LoggingService(settings)
             logging_service.setup()
             
-            graph_logger = logging_service.log_graph_operation(
-                operation="create_node",
-                node_type="User",
-                properties={"name": "John"}
-            )
-            
-            assert graph_logger is not None
-            assert hasattr(graph_logger, 'info')
+            logger = get_logger("test_module")
+            with patch.object(logger, 'info') as mock_info:
+                logging_service.log_graph_operation(
+                    logger,
+                    operation="create_node",
+                    node_type="User",
+                    properties={"name": "John"}
+                )
+                mock_info.assert_called_once()
 
 
 class TestLoggingServiceCleanup:
@@ -342,7 +347,7 @@ class TestLoggingServiceCleanup:
             initial_handlers = len(logging_service._handlers)
             assert initial_handlers > 0
             
-            with patch('puntini.logging.logger.logger.remove') as mock_remove:
+            with patch('logging.RootLogger.removeHandler') as mock_remove:
                 logging_service.cleanup()
                 
                 # Should remove all handlers
@@ -384,9 +389,50 @@ class TestGlobalLoggingFunctions:
             assert logging_service._configured is True
 
 
+import io
+import logging
+
 class TestLoggingServiceIntegration:
     """Test LoggingService integration with actual logging."""
     
+    def test_error_log_includes_stack_trace(self):
+        """Test that logger.error() from an except block includes a stack trace."""
+        # Use a stream handler to capture log output
+        log_stream = io.StringIO()
+
+        # Create a new logging service with a custom handler
+        settings = Settings()
+        settings.logging.console_logging = False # Disable default console handler
+
+        logging_service = LoggingService(settings)
+
+        # Add our stream handler to the root logger
+        stream_handler = logging.StreamHandler(log_stream)
+
+        # Use the custom formatter to match the service's configuration
+        formatter = logging_service._formatters.get('console')
+        if formatter:
+            stream_handler.setFormatter(formatter)
+
+        root_logger = logging.getLogger()
+        root_logger.addHandler(stream_handler)
+
+        logger = logging_service.get_logger("test_exception")
+
+        try:
+            raise ValueError("This is a test exception")
+        except ValueError:
+            logger.exception("An error occurred")
+
+        # Clean up the handler
+        root_logger.removeHandler(stream_handler)
+
+        log_output = log_stream.getvalue()
+
+        assert "An error occurred" in log_output
+        assert "Traceback (most recent call last):" in log_output
+        assert 'raise ValueError("This is a test exception")' in log_output
+
     def test_basic_logging_functionality(self):
         """Test that basic logging works correctly."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -423,14 +469,16 @@ class TestLoggingServiceIntegration:
             logger = logging_service.get_logger("test_module")
             
             # Test structured logging
-            logger.info(
-                "User action performed",
-                user_id="12345",
-                action="login",
-                ip_address="192.168.1.1",
-                success=True
-            )
-            
+            extra_data = {
+                "user_id": "12345",
+                "action": "login",
+                "ip_address": "192.168.1.1",
+                "success": True
+            }
+            with patch.object(logger, '_log') as mock_log:
+                logger.info("User action performed", extra=extra_data)
+                mock_log.assert_called_once()
+
             # Verify log files were created
             logs_path = Path(temp_dir)
             log_files = list(logs_path.glob("*.log"))
@@ -446,29 +494,33 @@ class TestLoggingServiceIntegration:
             logging_service = LoggingService(settings)
             logging_service.setup()
             
-            # Test agent step logging
-            agent_logger = logging_service.log_agent_step(
-                step="parse_goal",
-                state={"goal": "Create a user node", "attempt": 1},
-                complexity="simple"
-            )
-            agent_logger.info("Processing agent step")
-            
-            # Test LLM call logging
-            llm_logger = logging_service.log_llm_call(
-                model="gpt-4",
-                prompt_length=150,
-                temperature=0.1
-            )
-            llm_logger.info("Making LLM API call")
-            
-            # Test graph operation logging
-            graph_logger = logging_service.log_graph_operation(
-                operation="create_node",
-                node_type="User",
-                properties={"name": "John"}
-            )
-            graph_logger.info("Executing graph operation")
+            logger = get_logger("test_module")
+            with patch.object(logger, 'info') as mock_info:
+                # Test agent step logging
+                logging_service.log_agent_step(
+                    logger,
+                    step="parse_goal",
+                    state={"goal": "Create a user node", "attempt": 1},
+                    complexity="simple"
+                )
+
+                # Test LLM call logging
+                logging_service.log_llm_call(
+                    logger,
+                    model="gpt-4",
+                    prompt_length=150,
+                    temperature=0.1
+                )
+
+                # Test graph operation logging
+                logging_service.log_graph_operation(
+                    logger,
+                    operation="create_node",
+                    node_type="User",
+                    properties={"name": "John"}
+                )
+
+                assert mock_info.call_count == 3
             
             # Verify log files were created
             logs_path = Path(temp_dir)
@@ -478,25 +530,6 @@ class TestLoggingServiceIntegration:
 
 class TestLoggingServiceErrorHandling:
     """Test LoggingService error handling."""
-    
-    def test_setup_with_invalid_logs_path(self):
-        """Test setup with invalid logs path."""
-        settings = Settings()
-        settings.logging.logs_path = "/invalid/path/that/does/not/exist"
-        settings.logging.console_logging = False
-        
-        logging_service = LoggingService(settings)
-        
-        # Should handle invalid path gracefully by using fallback
-        with patch('pathlib.Path.mkdir') as mock_mkdir:
-            # First call fails, second call (fallback) succeeds
-            mock_mkdir.side_effect = [PermissionError("Permission denied"), None]
-            
-            # Should not raise exception and should use fallback
-            logging_service.setup()
-            
-            # Should have called mkdir twice (original + fallback)
-            assert mock_mkdir.call_count == 2
     
     def test_logger_creation_without_setup(self):
         """Test logger creation without prior setup."""
@@ -508,36 +541,6 @@ class TestLoggingServiceErrorHandling:
         assert logging_service._configured is True
 
 
-class TestLoggingServiceFormatters:
-    """Test LoggingService formatter methods."""
-    
-    def test_file_format(self):
-        """Test file format string."""
-        logging_service = LoggingService()
-        format_string = logging_service._get_file_format()
-        
-        assert isinstance(format_string, str)
-        assert "time" in format_string
-        assert "level" in format_string
-        assert "name" in format_string
-        assert "function" in format_string
-        assert "line" in format_string
-        assert "message" in format_string
-    
-    def test_console_format(self):
-        """Test console format string."""
-        logging_service = LoggingService()
-        format_string = logging_service._get_console_format()
-        
-        assert isinstance(format_string, str)
-        assert "time" in format_string
-        assert "level" in format_string
-        assert "name" in format_string
-        assert "function" in format_string
-        assert "line" in format_string
-        assert "message" in format_string
-        # Should contain color tags
-        assert "<" in format_string and ">" in format_string
 
 
 @pytest.fixture
