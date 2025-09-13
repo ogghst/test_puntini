@@ -5,6 +5,7 @@ retry, or diagnose based on step results.
 """
 
 from typing import Any, Dict
+from langgraph.types import Command
 from ..orchestration.state import State
 
 
@@ -19,7 +20,8 @@ def evaluate(state: State) -> Dict[str, Any]:
         state: Current agent state with step result.
         
     Returns:
-        Updated state with evaluation results.
+        A dictionary with the updated state. The graph will not use a Command here,
+        but the router function `route_after_evaluate` will inspect the state.
         
     Notes:
         The evaluation should consider the step result, current retry
@@ -29,46 +31,20 @@ def evaluate(state: State) -> Dict[str, Any]:
     result = state.get("result", {})
     status = result.get("status", "unknown")
     retry_count = state.get("retry_count", 0)
-    max_retries = state.get("max_retries", 3)
-    
-    # Enhanced evaluation logic
-    evaluation_result = {
-        "status": status,
-        "retry_count": retry_count,
-        "max_retries": max_retries,
-        "evaluation_timestamp": "now",  # Could use actual timestamp
-        "decision_reason": ""
-    }
     
     if status == "success":
-        # Check if the entire goal is complete
+        # The 'goal_complete' flag should be set by the tool if the goal is met.
         goal_complete = result.get("goal_complete", False)
-        evaluation_result.update({
-            "decision_reason": "Step completed successfully",
-            "goal_complete": goal_complete,
-            "next_action": "continue" if not goal_complete else "complete"
-        })
-    elif status == "error":
-        if retry_count < max_retries:
-            evaluation_result.update({
-                "decision_reason": f"Error occurred, retrying (attempt {retry_count + 1}/{max_retries})",
-                "next_action": "retry",
-                "retry_count": retry_count + 1
-            })
-        else:
-            evaluation_result.update({
-                "decision_reason": "Max retries exceeded, escalating",
-                "next_action": "escalate",
-                "retry_count": retry_count
-            })
-    else:
-        evaluation_result.update({
-            "decision_reason": "Unknown status, escalating",
-            "next_action": "escalate"
-        })
-    
-    return {
-        "current_step": "evaluate_complete",
-        "result": evaluation_result,
-        "progress": [f"Evaluated step result: {evaluation_result['decision_reason']}"]
-    }
+        return {
+            "result": {
+                "status": "success",
+                "goal_complete": goal_complete
+            }
+        }
+    else: # status == "error"
+        return {
+            "retry_count": retry_count + 1,
+            "result": {
+                "status": "error"
+            }
+        }

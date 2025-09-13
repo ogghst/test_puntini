@@ -152,20 +152,22 @@ def call_tool(state: State) -> Dict[str, Any]:
     }
 
 
-def evaluate(state: State) -> Command:
+def evaluate(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
     """Evaluate the step result and decide next action.
     
+    This function delegates to the actual evaluate implementation
+    in the nodes module to maintain separation of concerns.
+
     Args:
         state: Current agent state.
+        config: Optional RunnableConfig for additional configuration.
+        runtime: Optional Runtime context for additional runtime information.
         
     Returns:
-        Command with next node and state updates.
+        Updated state with evaluation results.
     """
-    # TODO: Implement evaluation logic
-    if state.get("result", {}).get("status") == "success":
-        return Command(update={"current_step": "answer"}, goto="answer")
-    else:
-        return Command(update={"current_step": "diagnose"}, goto="diagnose")
+    from ..nodes.evaluate import evaluate as evaluate_impl
+    return evaluate_impl(state)
 
 
 def diagnose(state: State) -> Dict[str, Any]:
@@ -257,6 +259,7 @@ def create_agent_graph(checkpointer: BaseCheckpointSaver | None = None) -> State
     # Direct edges for planning and routing
     workflow.add_edge("plan_step", "route_tool")
     workflow.add_edge("route_tool", "call_tool")
+    workflow.add_edge("call_tool", "evaluate")
     
     # Conditional routing after evaluate
     workflow.add_conditional_edges(
