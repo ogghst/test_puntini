@@ -216,7 +216,7 @@ Derivations: Node, Edge, NodeSpec, EdgeSpec, Patch inherit fields and enforce in
 
 ## Tools and Contracts
 
-- GraphOps: add_node, add_edge, update_props, delete with Pydantic schemas; returns BaseEntity‑derived results; human‑readable, actionable error messages.
+- GraphStore: add_node, add_edge, update_props, delete with Pydantic schemas; returns BaseEntity‑derived results; human‑readable, actionable error messages.
 - CypherQA: NL → Cypher → execute → answer; results explicitly typed; errors guide corrective actions.
 - Bind tools to the chat model; validate structured inputs before execution; redact sensitive data in spans.
 
