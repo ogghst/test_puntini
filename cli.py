@@ -9,9 +9,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
-# Add the project root to the Python path for direct execution
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+# Note: Path modification removed to avoid import conflicts
+# The CLI should be run as a module: python -m puntini.cli
 
 from puntini.agents.agent_factory import create_simple_agent, create_agent_with_components
 from puntini.settings import settings
@@ -102,9 +101,17 @@ def run(goal: str, config: str | None, verbose: bool, tracer: str):
         langfuse = get_client()
         langfuse_handler = CallbackHandler()
         thread_id = str(uuid.uuid4())
+        
+        # Create LLM for the graph context
+        from puntini.llm.llm_models import LLMFactory
+        llm_factory = LLMFactory()
+        llm = llm_factory.get_default_llm()
+        
+        # Pass LLM through context
+        context = {"llm": llm}
         config = {"configurable": {"thread_id": thread_id}, "callbacks": [langfuse_handler]}
         
-        result = agent.invoke(initial_state, config=config)
+        result = agent.invoke(initial_state, config=config, context=context)
         click.echo(f"✅ Agent completed successfully!")
         if verbose:
             click.echo(f"Result: {result}")

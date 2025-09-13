@@ -9,13 +9,13 @@ from typing import Any, Dict, Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
-from langgraph.runtime import Runtime
+from langgraph.runtime import Runtime, get_runtime
+from langchain_core.language_models.chat_models import BaseChatModel
 
 from ..orchestration.state import State
 from ..models.goal_schemas import GoalSpec, GoalComplexity
 from ..models.errors import ValidationError
 from ..logging import get_logger
-from ..llm.llm_models import LLMFactory
 
 
 def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
@@ -23,7 +23,8 @@ def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: O
     
     This node extracts the goal, constraints, and domain hints from
     the input using LangChain's structured output capabilities and
-    Pydantic models for validation.
+    Pydantic models for validation. The LLM is obtained from the
+    graph context instead of creating a new instance.
     
     Args:
         state: Current agent state containing the goal.
@@ -40,6 +41,7 @@ def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: O
         This is the first node in the execution flow and should
         extract all necessary information from the input goal.
         Uses progressive context disclosure - attempt 1 with minimal context.
+        The LLM is obtained from the graph context to ensure consistency.
     """
     # Initialize logger for this module
     logger = get_logger(__name__)
@@ -73,16 +75,32 @@ def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: O
         raise ValidationError("Goal cannot be empty")
     
     try:
-        # Get LLM from factory
-        logger.debug("Initializing LLM factory for goal parsing")
-        llm_factory = LLMFactory()
-        # Use default LLM instead of hardcoded "ollama"
-        structured_llm = llm_factory.create_structured_llm(None, GoalSpec)
+        # Get LLM from graph context
+        logger.debug("Getting LLM from graph context for goal parsing")
+        
+        # Get the runtime context to access the configured LLM
+        if runtime is None:
+            # Fallback to get_runtime if runtime is not passed directly
+            try:
+                runtime = get_runtime()
+            except Exception as e:
+                logger.error(f"Failed to get runtime context: {e}")
+                raise ValidationError("Runtime context not available for LLM access")
+        
+        # Get the LLM from the context
+        if not hasattr(runtime, 'context') or 'llm' not in runtime.context:
+            logger.error("LLM not found in runtime context")
+            raise ValidationError("LLM not configured in graph context")
+        
+        llm : BaseChatModel = runtime.context['llm']
+      
+        # Create structured LLM for goal parsing
+        structured_llm = llm.with_structured_output(GoalSpec)
         
         logger.info(
-            "Created structured LLM for goal parsing",
+            "Using LLM from graph context for goal parsing",
             extra={
-                "llm_type": "default",
+                "llm_type": type(llm).__name__,
                 "target_model": GoalSpec.__name__
             }
         )

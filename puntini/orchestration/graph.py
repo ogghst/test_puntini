@@ -4,10 +4,12 @@ This module defines the main LangGraph state machine with nodes, edges,
 and conditional routing for the agent's execution flow.
 """
 
-from typing import Any, Dict, Literal
+from typing import Any, Dict, Literal, Optional
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.types import Command
+from langgraph.runtime import Runtime
+from langchain_core.runnables import RunnableConfig
 
 from .state import State
 from .checkpointer import create_checkpointer, get_checkpoint_config
@@ -86,7 +88,7 @@ def route_after_diagnose(state: State) -> str:
         return "escalate"
 
 
-def parse_goal(state: State) -> Dict[str, Any]:
+def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
     """Parse the goal and extract structured information.
     
     This function delegates to the actual parse_goal implementation
@@ -94,28 +96,29 @@ def parse_goal(state: State) -> Dict[str, Any]:
     
     Args:
         state: Current agent state.
+        config: Optional RunnableConfig for additional configuration.
+        runtime: Optional Runtime context for additional runtime information.
         
     Returns:
         Updated state with parsed goal information.
     """
     from ..nodes.parse_goal import parse_goal as parse_goal_impl
-    return parse_goal_impl(state)
+    return parse_goal_impl(state, config, runtime)
 
 
-def plan_step(state: State) -> Dict[str, Any]:
+def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
     """Plan the next step in the agent's execution.
     
     Args:
         state: Current agent state.
+        config: Optional RunnableConfig for additional configuration.
+        runtime: Optional Runtime context for additional runtime information.
         
     Returns:
         Updated state with planned step.
     """
-    # TODO: Implement step planning logic
-    return {
-        "current_step": "route_tool",
-        "_tool_signature": {"name": "example_tool", "args": {}}
-    }
+    from ..nodes.plan_step import plan_step as plan_step_impl
+    return plan_step_impl(state, config, runtime)
 
 
 def route_tool(state: State) -> Dict[str, Any]:

@@ -4,8 +4,10 @@ This module implements the plan_step node that proposes the next
 micro-step and the candidate tool signature using LLM-based planning.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableConfig
+from langgraph.runtime import Runtime, get_runtime
 from pydantic import BaseModel, Field
 
 from ..orchestration.state import State
@@ -31,15 +33,18 @@ class StepPlan(BaseModel):
     overall_progress: float = Field(ge=0.0, le=1.0, description="Overall progress towards goal completion")
 
 
-def plan_step(state: State) -> Dict[str, Any]:
+def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
     """Plan the next step in the agent's execution using LLM.
     
     This node analyzes the current state, including the parsed goal,
     and determines the next micro-step to take using LLM-based planning
-    with structured output for reliable tool selection.
+    with structured output for reliable tool selection. The LLM is obtained
+    from the graph context instead of creating a new instance.
     
     Args:
         state: Current agent state with parsed goal information.
+        config: Optional RunnableConfig for additional configuration.
+        runtime: Optional Runtime context for additional runtime information.
         
     Returns:
         Updated state with planned step information.
@@ -48,6 +53,7 @@ def plan_step(state: State) -> Dict[str, Any]:
         The planned step includes all necessary information for tool
         execution, including the tool name, validated parameters,
         reasoning, and confidence score.
+        The LLM is obtained from the graph context to ensure consistency.
     """
     # Get parsed goal from artifacts
     parsed_goal_data = None
@@ -61,9 +67,45 @@ def plan_step(state: State) -> Dict[str, Any]:
         return _create_fallback_plan(state)
     
     try:
-        # Get LLM from factory
-        llm_factory = LLMFactory()
-        llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
+        # Get LLM from graph context
+        if runtime is None:
+            # Fallback to get_runtime if runtime is not passed directly
+            try:
+                runtime = get_runtime()
+            except Exception as e:
+                # Fallback to factory if runtime is not available
+                llm_factory = LLMFactory()
+                llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
+            else:
+                # Get the LLM from the context
+                if not hasattr(runtime, 'context') or 'llm' not in runtime.context:
+                    # Fallback to factory if LLM not in context
+                    llm_factory = LLMFactory()
+                    llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
+                else:
+                    llm = runtime.context['llm']
+                    # Handle different LLM types that may not support with_structured_output
+                    try:
+                        llm = llm.with_structured_output(StepPlan)
+                    except (AttributeError, TypeError, Exception) as e:
+                        # Fallback: Use the LLM factory to create a structured version
+                        llm_factory = LLMFactory()
+                        llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
+        else:
+            # Get the LLM from the context
+            if not hasattr(runtime, 'context') or 'llm' not in runtime.context:
+                # Fallback to factory if LLM not in context
+                llm_factory = LLMFactory()
+                llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
+            else:
+                llm = runtime.context['llm']
+                # Handle different LLM types that may not support with_structured_output
+                try:
+                    llm = llm.with_structured_output(StepPlan)
+                except (AttributeError, TypeError, Exception) as e:
+                    # Fallback: Use the LLM factory to create a structured version
+                    llm_factory = LLMFactory()
+                    llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
         
         # Create planning prompt
         prompt = ChatPromptTemplate.from_messages([

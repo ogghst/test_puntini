@@ -11,7 +11,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain.chat_models import init_chat_model
 from langchain_ollama import ChatOllama
 from langchain_core.callbacks.base import BaseCallbackHandler
-
+from langchain_deepseek import ChatDeepSeek
 from ..settings import Settings, LLMProviderConfig
 
 
@@ -205,6 +205,14 @@ class LLMFactory:
                 request_timeout=60,
                 **model_params
             )
+            
+        elif provider_type == "deepseek":
+            return ChatDeepSeek(
+                api_key=config.api_key,
+                max_retries=3,
+                request_timeout=60,
+                **model_params
+            )
         
         elif provider_type == "anthropic":
             return ChatAnthropic(
@@ -219,6 +227,9 @@ class LLMFactory:
             # Handle custom base URL for Ollama
             if config.base_url:
                 model_params["base_url"] = config.base_url
+                            
+            if config.max_tokens:
+                model_params["num_predict"] = config.max_tokens
             
             return ChatOllama(
                 **model_params
