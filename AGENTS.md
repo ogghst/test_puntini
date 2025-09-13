@@ -24,6 +24,25 @@ Purpose: Define a controllable, observable multi‑tool agent for graph manipula
 - Observability: Langfuse (traces, spans, prompt management, evaluations).
 
 
+## LLM Configuration
+
+The agent supports multiple LLM providers (e.g., OpenAI, Anthropic, Ollama). The configuration is managed through `puntini/settings.py` and can be customized in `config.json`.
+
+- **LLMConfig**: The main configuration object for LLMs. It defines a default LLM and holds a list of provider configurations.
+- **LLMProviderConfig**: Defines the settings for a single LLM provider, including `name`, `type`, `api_key`, `model_name`, `temperature`, etc.
+
+This setup allows for easy switching between different models and providers.
+
+
+## Logging Configuration
+
+The system includes a configurable logging module found in `puntini/logging/`.
+
+- **LoggingConfig**: A dataclass in `puntini/settings.py` that defines logging behavior.
+- **Settings**: It includes `log_level`, `console_logging`, log file path, and rotation policies (`max_bytes`, `backup_count`).
+- **Custom Formatters**: The module includes custom formatters for rich logging output.
+
+
 ## State Graph: Nodes and Responsibilities
 
 - ParseGoal: Extract goal, constraints, domain hints as structured data.
@@ -183,7 +202,7 @@ def make_graph_store(cfg: GraphStoreConfig) -> GraphStore:
         # TODO: Implement Neo4j graph store
         raise NotImplementedError("Neo4j graph store not yet implemented")
     elif cfg.kind == "memory":
-        from ..tools.graph_ops import InMemoryGraphStore
+        from .in_memory_graph import InMemoryGraphStore
         return InMemoryGraphStore()
     else:
         raise ValueError(f"Unsupported graph store type: {cfg.kind}")
@@ -252,17 +271,20 @@ ON MATCH  SET t += $props, t.updated_at = timestamp()
 ## Directory Layout
 
 - /puntini/
-    - interfaces/ (graph_store.py, context_manager.py, tool_registry.py, planner.py, executor.py, evaluator.py, error_classifier.py, escalation.py, tracer.py)
-    - models/ (base.py, node.py, edge.py, patch.py, errors.py, specs.py)
-    - nodes/ (parse_goal.py, plan_step.py, route_tool.py, call_tool.py, evaluate.py, diagnose.py, escalate.py, answer.py)
-    - orchestration/ (state.py, graph.py, reducers.py, checkpointer.py)
-    - tools/ (graph_ops.py, cypher_qa.py, tool_registry.py, tool_registry_factory.py)
-    - observability/ (langfuse_tracer.py, console_tracer.py, noop_tracer.py, tracer_factory.py)
     - agents/ (agent_factory.py)
     - context/ (context_manager.py, context_manager_factory.py)
-    - graph/ (graph_store_factory.py)
-    - cli.py, settings.py
-    - tests/ (unit/, e2e/, golden_traces/)
+    - graph/ (graph_store_factory.py, in_memory_graph.py)
+    - interfaces/ (context_manager.py, error_classifier.py, escalation.py, evaluator.py, executor.py, graph_store.py, planner.py, tool_registry.py, tracer.py)
+    - llm/ (llm_models.py)
+    - logging/ (custom_formatter.py, formatters.py, handlers.py, logger.py)
+    - models/ (base.py, edge.py, entities.py, errors.py, goal_schemas.py, node.py, patch.py, specs.py)
+    - nodes/ (answer.py, call_tool.py, diagnose.py, escalate.py, evaluate.py, parse_goal.py, plan_step.py, route_tool.py)
+    - observability/ (console_tracer.py, langfuse_callback.py, langfuse_tracer.py, noop_tracer.py, tracer_factory.py)
+    - orchestration/ (checkpointer.py, graph.py, reducers.py, state.py)
+    - tools/ (cypher_qa.py, tool_registry.py, tool_registry_factory.py)
+    - tests/ (unit/, integration/, e2e/, golden_traces/)
+    - settings.py
+- cli.py (at root)
 
 
 ## Build Steps for Cursor
@@ -270,16 +292,17 @@ ON MATCH  SET t += $props, t.updated_at = timestamp()
 - ✅ Create interfaces for all components; add comprehensive docstrings and type hints.
 - ✅ Implement factories with configuration objects; wire no‑op or in‑memory defaults for tests.
 - ✅ Add BaseEntity and derived models with UUIDv4 id generation in code; prohibit LLM from proposing ids.
-- 🔄 Assemble the LangGraph skeleton using the interfaces; return Command for update+goto; enable checkpointer.
-- 🔄 Add Langfuse tracer and attach callback handler to the compiled graph; propagate a trace_id across nested calls.
-- ⏳ Only after the skeleton is green, implement concrete backends (Neo4j GraphStore, real ContextManager policies, real tools).
+- ✅ Assemble the LangGraph skeleton using the interfaces; return Command for update+goto; enable checkpointer.
+- ✅ Add Langfuse tracer and attach callback handler to the compiled graph; propagate a trace_id across nested calls.
+- ⏳ Implement concrete logic for graph nodes (`call_tool`, `evaluate`, `diagnose`, etc.).
+- ⏳ Implement concrete backends (Neo4j GraphStore, real ContextManager policies).
 
 **Current Status:**
 - Interfaces are defined in `/puntini/interfaces/`
 - Factories are implemented and distributed across relevant modules
 - BaseEntity model is implemented in `/puntini/models/base.py`
 - State schema is defined in `/puntini/orchestration/state.py`
-- Graph orchestration skeleton is in `/puntini/orchestration/graph.py`
+- Graph orchestration skeleton is in `/puntini/orchestration/graph.py` (node logic is mostly placeholder).
 - Tracer implementations are in `/puntini/observability/`
 
 
@@ -307,8 +330,8 @@ ON MATCH  SET t += $props, t.updated_at = timestamp()
 
 - ✅ Interfaces and factories exist for all major components; graph skeleton compiles and runs with in‑memory stubs.
 - ✅ All data models inherit BaseEntity; ids are UUIDv4 from code; no LLM‑generated ids anywhere.
-- 🔄 Langfuse traces span the entire run including sub‑agents/tools; a single trace_id links nested spans.
-- ⏳ Progressive disclosure implemented across three attempts; escalation via interrupt after threshold; deterministic resume.
+- ✅ Langfuse traces span the entire run including sub‑agents/tools; a single trace_id links nested spans.
+- ⏳ Progressive disclosure is implemented in the `ContextManager`.
 - ⏳ Neo4j backend uses MERGE semantics and returns typed, human‑readable error messages.
 
 **Implementation Notes:**
