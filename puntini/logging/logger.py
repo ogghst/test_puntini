@@ -1,25 +1,26 @@
-"""Main logging service implementation using Loguru.
+"""Main logging service implementation using Python standard logging.
 
 This module provides a comprehensive logging service with support for:
 - Structured logging with context
 - File rotation and retention
 - Console and file output
-- JSON formatting for production
+- Custom formatting for production
 - Performance optimization
 """
 
 import sys
 import os
+import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
-from loguru import logger
+from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
 from ..settings import Settings
 
 
 class LoggingService:
-    """Centralized logging service using Loguru.
+    """Centralized logging service using Python standard logging.
     
     This service provides structured logging with support for multiple
     output formats, file rotation, and context-aware logging.
@@ -35,6 +36,7 @@ class LoggingService:
         self.settings = settings or Settings()
         self._configured = False
         self._handlers = []
+        self._formatters = {}
         
     def setup(self) -> None:
         """Configure the logging service based on settings.
@@ -45,9 +47,6 @@ class LoggingService:
         if self._configured:
             return
             
-        # Remove default handler
-        logger.remove()
-        
         # Create logs directory if it doesn't exist
         logs_path = Path(self.settings.logging.logs_path)
         try:
@@ -58,6 +57,9 @@ class LoggingService:
             logs_path = Path(tempfile.gettempdir()) / "puntini_logs"
             logs_path.mkdir(parents=True, exist_ok=True)
         
+        # Setup formatters
+        self._setup_formatters()
+        
         # Setup handlers
         self._setup_file_handler(logs_path)
         
@@ -65,6 +67,20 @@ class LoggingService:
             self._setup_console_handler()
             
         self._configured = True
+        
+    def _setup_formatters(self) -> None:
+        """Setup formatters for different output types."""
+        # File formatter
+        self._formatters['file'] = logging.Formatter(
+            fmt='%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        
+        # Console formatter
+        self._formatters['console'] = logging.Formatter(
+            fmt='%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
         
     def _setup_file_handler(self, logs_path: Path) -> None:
         """Setup file handler with rotation and retention.
@@ -74,76 +90,48 @@ class LoggingService:
         """
         log_file = logs_path / self.settings.logging.log_file
         
-        # File handler with rotation
-        handler_id = logger.add(
+        # Main file handler with rotation
+        file_handler = RotatingFileHandler(
             str(log_file),
-            level=self.settings.logging.log_level,
-            format=self._get_file_format(),
-            rotation=f"{self.settings.logging.max_bytes // (1024 * 1024)} MB",
-            retention=f"{self.settings.logging.backup_count} days",
-            compression="zip",
-            enqueue=True,  # Thread-safe logging
-            backtrace=True,
-            diagnose=True,
-            serialize=False,  # Use structured format instead of JSON
+            maxBytes=self.settings.logging.max_bytes,
+            backupCount=self.settings.logging.backup_count,
+            encoding='utf-8'
         )
-        self._handlers.append(handler_id)
+        file_handler.setLevel(getattr(logging, self.settings.logging.log_level.upper()))
+        file_handler.setFormatter(self._formatters['file'])
         
         # Error file handler
         error_file = logs_path / "error.log"
-        error_handler_id = logger.add(
+        error_handler = RotatingFileHandler(
             str(error_file),
-            level="ERROR",
-            format=self._get_file_format(),
-            rotation=f"{self.settings.logging.max_bytes // (1024 * 1024)} MB",
-            retention=f"{self.settings.logging.backup_count} days",
-            compression="zip",
-            enqueue=True,
-            backtrace=True,
-            diagnose=True,
-            filter=lambda record: record["level"].name in ["ERROR", "CRITICAL"],
+            maxBytes=self.settings.logging.max_bytes,
+            backupCount=self.settings.logging.backup_count,
+            encoding='utf-8'
         )
-        self._handlers.append(error_handler_id)
+        error_handler.setLevel(logging.ERROR)
+        error_handler.setFormatter(self._formatters['file'])
+        
+        # Configure root logger
+        root_logger = logging.getLogger()
+        root_logger.setLevel(getattr(logging, self.settings.logging.log_level.upper()))
+        root_logger.addHandler(file_handler)
+        root_logger.addHandler(error_handler)
+        
+        self._handlers.extend([file_handler, error_handler])
         
     def _setup_console_handler(self) -> None:
         """Setup console handler for development."""
-        console_handler_id = logger.add(
-            sys.stderr,
-            level=self.settings.logging.log_level,
-            format=self._get_console_format(),
-            colorize=True,
-            backtrace=True,
-            diagnose=True,
-        )
-        self._handlers.append(console_handler_id)
+        console_handler = logging.StreamHandler(sys.stderr)
+        console_handler.setLevel(getattr(logging, self.settings.logging.log_level.upper()))
+        console_handler.setFormatter(self._formatters['console'])
         
-    def _get_file_format(self) -> str:
-        """Get format string for file logging.
+        # Add to root logger
+        root_logger = logging.getLogger()
+        root_logger.addHandler(console_handler)
         
-        Returns:
-            Format string for structured file logging.
-        """
-        return (
-            "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
-            "{level: <8} | "
-            "{name}:{function}:{line} | "
-            "{message}"
-        )
+        self._handlers.append(console_handler)
         
-    def _get_console_format(self) -> str:
-        """Get format string for console logging.
-        
-        Returns:
-            Format string for colored console logging.
-        """
-        return (
-            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-            "<level>{level: <8}</level> | "
-            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-            "<level>{message}</level>"
-        )
-        
-    def get_logger(self, name: str) -> Any:
+    def get_logger(self, name: str) -> logging.Logger:
         """Get a logger instance for a specific module.
         
         Args:
@@ -154,92 +142,91 @@ class LoggingService:
         """
         if not self._configured:
             self.setup()
-        return logger.bind(module=name)
+        return logging.getLogger(name)
         
-    def add_context(self, **kwargs: Any) -> Any:
+    def add_context(self, **kwargs: Any) -> Dict[str, Any]:
         """Add context to the current logger.
         
         Args:
             **kwargs: Context variables to add.
             
         Returns:
-            Logger instance with added context.
+            Context dictionary for use with logging methods.
         """
-        return logger.bind(**kwargs)
+        return kwargs
         
-    def log_function_call(self, func_name: str, **kwargs: Any) -> Any:
+    def log_function_call(self, logger: logging.Logger, func_name: str, **kwargs: Any) -> None:
         """Log a function call with parameters.
         
         Args:
+            logger: Logger instance to use.
             func_name: Name of the function being called.
             **kwargs: Function parameters and context.
-            
-        Returns:
-            Logger instance with function context.
         """
-        return logger.bind(
-            function=func_name,
-            call_type="function",
+        context = {
+            'function': func_name,
+            'call_type': 'function',
             **kwargs
-        )
+        }
+        logger.info(f"Function call: {func_name}", extra=context)
         
-    def log_agent_step(self, step: str, state: Dict[str, Any], **kwargs: Any) -> Any:
+    def log_agent_step(self, logger: logging.Logger, step: str, state: Dict[str, Any], **kwargs: Any) -> None:
         """Log an agent execution step.
         
         Args:
+            logger: Logger instance to use.
             step: Name of the agent step.
             state: Current agent state.
             **kwargs: Additional context.
-            
-        Returns:
-            Logger instance with agent context.
         """
-        return logger.bind(
-            agent_step=step,
-            call_type="agent",
-            state_keys=list(state.keys()) if state else [],
+        context = {
+            'agent_step': step,
+            'call_type': 'agent',
+            'state_keys': list(state.keys()) if state else [],
             **kwargs
-        )
+        }
+        logger.info(f"Agent step: {step}", extra=context)
         
-    def log_llm_call(self, model: str, prompt_length: int, **kwargs: Any) -> Any:
+    def log_llm_call(self, logger: logging.Logger, model: str, prompt_length: int, **kwargs: Any) -> None:
         """Log an LLM API call.
         
         Args:
+            logger: Logger instance to use.
             model: Name of the LLM model.
             prompt_length: Length of the prompt.
             **kwargs: Additional context.
-            
-        Returns:
-            Logger instance with LLM context.
         """
-        return logger.bind(
-            llm_model=model,
-            prompt_length=prompt_length,
-            call_type="llm",
+        context = {
+            'llm_model': model,
+            'prompt_length': prompt_length,
+            'call_type': 'llm',
             **kwargs
-        )
+        }
+        logger.info(f"LLM call: {model}", extra=context)
         
-    def log_graph_operation(self, operation: str, **kwargs: Any) -> Any:
+    def log_graph_operation(self, logger: logging.Logger, operation: str, **kwargs: Any) -> None:
         """Log a graph database operation.
         
         Args:
+            logger: Logger instance to use.
             operation: Type of graph operation.
             **kwargs: Additional context.
-            
-        Returns:
-            Logger instance with graph context.
         """
-        return logger.bind(
-            graph_operation=operation,
-            call_type="graph",
+        context = {
+            'graph_operation': operation,
+            'call_type': 'graph',
             **kwargs
-        )
+        }
+        logger.info(f"Graph operation: {operation}", extra=context)
         
     def cleanup(self) -> None:
         """Clean up logging handlers."""
-        for handler_id in self._handlers:
-            logger.remove(handler_id)
+        root_logger = logging.getLogger()
+        for handler in self._handlers:
+            root_logger.removeHandler(handler)
+            handler.close()
         self._handlers.clear()
+        self._formatters.clear()
         self._configured = False
 
 
@@ -260,7 +247,7 @@ def get_logging_service() -> LoggingService:
     return _logging_service
 
 
-def get_logger(name: str) -> Any:
+def get_logger(name: str) -> logging.Logger:
     """Get a logger instance for a module.
     
     Args:

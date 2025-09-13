@@ -61,13 +61,15 @@ def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: O
     # Log function entry with context
     logger.info(
         "Starting goal parsing",
-        goal_length=len(goal),
-        current_attempt=current_attempt,
-        state_keys=list(state.keys())
+        extra={
+            "goal_length": len(goal),
+            "current_attempt": current_attempt,
+            "state_keys": list(state.keys())
+        }
     )
     
     if not goal.strip():
-        logger.error("Empty goal provided", goal=goal)
+        logger.error("Empty goal provided", extra={"goal": goal})
         raise ValidationError("Goal cannot be empty")
     
     try:
@@ -79,8 +81,10 @@ def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: O
         
         logger.info(
             "Created structured LLM for goal parsing",
-            llm_type="default",
-            target_model=GoalSpec.__name__
+            extra={
+                "llm_type": "default",
+                "target_model": GoalSpec.__name__
+            }
         )
         
         # Create prompt for goal parsing (progressive disclosure - attempt 1)
@@ -119,14 +123,16 @@ Return a GoalSpec object with all extracted information."""),
         parsing_chain = prompt | structured_llm
         
         # Parse the goal
-        logger.info("Invoking LLM for goal parsing", goal_preview=goal[:100] + "..." if len(goal) > 100 else goal)
+        logger.info("Invoking LLM for goal parsing", extra={"goal_preview": goal[:100] + "..." if len(goal) > 100 else goal})
         parsed_goal_spec = parsing_chain.invoke({"goal": goal})
         
         logger.info(
             "Successfully parsed goal",
-            parsed_entities=len(parsed_goal_spec.entities) if parsed_goal_spec.entities else 0,
-            complexity=parsed_goal_spec.complexity.value if parsed_goal_spec.complexity else None,
-            intent_length=len(parsed_goal_spec.intent) if parsed_goal_spec.intent else 0
+            extra={
+                "parsed_entities": len(parsed_goal_spec.entities) if parsed_goal_spec.entities else 0,
+                "complexity": parsed_goal_spec.complexity.value if parsed_goal_spec.complexity else None,
+                "intent_length": len(parsed_goal_spec.intent) if parsed_goal_spec.intent else 0
+            }
         )
         
         # Validate the parsed goal
@@ -139,8 +145,10 @@ Return a GoalSpec object with all extracted information."""),
         if not parsed_goal_spec.entities and not parsed_goal_spec.intent:
             logger.error(
                 "Failed to extract meaningful entities or intent",
-                entities_count=len(parsed_goal_spec.entities) if parsed_goal_spec.entities else 0,
-                intent_present=bool(parsed_goal_spec.intent)
+                extra={
+                    "entities_count": len(parsed_goal_spec.entities) if parsed_goal_spec.entities else 0,
+                    "intent_present": bool(parsed_goal_spec.intent)
+                }
             )
             raise ValidationError("Could not extract meaningful entities or intent from goal")
         
@@ -148,15 +156,17 @@ Return a GoalSpec object with all extracted information."""),
         
         # Convert to dictionary for state storage
         parsed_goal_dict = parsed_goal_spec.model_dump()
-        logger.debug("Converted parsed goal to dictionary", dict_keys=list(parsed_goal_dict.keys()))
+        logger.debug("Converted parsed goal to dictionary", extra={"dict_keys": list(parsed_goal_dict.keys())})
         
         # Determine next step based on complexity and parsing results
         next_step = _determine_next_step(parsed_goal_spec, current_attempt)
         logger.info(
             "Determined next step",
-            next_step=next_step,
-            complexity=parsed_goal_spec.complexity.value if parsed_goal_spec.complexity else None,
-            is_simple=parsed_goal_spec.is_simple_goal()
+            extra={
+                "next_step": next_step,
+                "complexity": parsed_goal_spec.complexity.value if parsed_goal_spec.complexity else None,
+                "is_simple": parsed_goal_spec.is_simple_goal()
+            }
         )
         
         result = {
@@ -175,10 +185,12 @@ Return a GoalSpec object with all extracted information."""),
         
         logger.info(
             "Goal parsing completed successfully",
-            next_step=next_step,
-            complexity=parsed_goal_spec.complexity.value if parsed_goal_spec.complexity else None,
-            requires_graph_ops=parsed_goal_spec.requires_graph_operations(),
-            is_simple=parsed_goal_spec.is_simple_goal()
+            extra={
+                "next_step": next_step,
+                "complexity": parsed_goal_spec.complexity.value if parsed_goal_spec.complexity else None,
+                "requires_graph_ops": parsed_goal_spec.requires_graph_operations(),
+                "is_simple": parsed_goal_spec.is_simple_goal()
+            }
         )
         
         return result
@@ -189,10 +201,12 @@ Return a GoalSpec object with all extracted information."""),
         
         logger.error(
             "Goal validation failed",
-            error=str(e),
-            error_type="ValidationError",
-            current_attempt=current_attempt,
-            goal_length=len(goal)
+            extra={
+                "error": str(e),
+                "error_type": "ValidationError",
+                "current_attempt": current_attempt,
+                "goal_length": len(goal)
+            }
         )
         
         return {
@@ -224,16 +238,18 @@ Return a GoalSpec object with all extracted information."""),
         
         logger.error(
             "Goal parsing failed with exception",
-            error=str(e),
-            error_type=error_type,
-            error_classification=error_classification,
-            current_attempt=current_attempt,
-            goal_length=len(goal)
+            extra={
+                "error": str(e),
+                "error_type": error_type,
+                "error_classification": error_classification,
+                "current_attempt": current_attempt,
+                "goal_length": len(goal)
+            }
         )
         
         # If this is attempt 1, we might try with more context later
         if current_attempt == 1 and error_classification in ["network_error", "unknown_error"]:
-            logger.info("First attempt failed, will retry with diagnosis", attempt=current_attempt, error_classification=error_classification)
+            logger.info("First attempt failed, will retry with diagnosis", extra={"attempt": current_attempt, "error_classification": error_classification})
             return {
                 "current_step": "diagnose",
                 "current_attempt": current_attempt + 1,
@@ -248,7 +264,7 @@ Return a GoalSpec object with all extracted information."""),
         else:
             # Multiple attempts failed or non-retryable error, escalate
             logger.error("Multiple attempts failed or non-retryable error, escalating to human", 
-                        attempt=current_attempt, error_classification=error_classification)
+                        extra={"attempt": current_attempt, "error_classification": error_classification})
             return {
                 "current_step": "escalate",
                 "current_attempt": current_attempt,
@@ -276,14 +292,14 @@ def _determine_next_step(goal_spec: GoalSpec, current_attempt: int) -> str:
     
     # Simple goals might skip planning
     if goal_spec.is_simple_goal() and goal_spec.complexity == GoalComplexity.SIMPLE:
-        logger.debug("Simple goal detected, routing to tool", complexity=goal_spec.complexity.value)
+        logger.debug("Simple goal detected, routing to tool", extra={"complexity": goal_spec.complexity.value})
         return "route_tool"
     
     # Complex goals need planning
     if goal_spec.complexity in [GoalComplexity.MEDIUM, GoalComplexity.COMPLEX]:
-        logger.debug("Complex goal detected, routing to planning", complexity=goal_spec.complexity.value)
+        logger.debug("Complex goal detected, routing to planning", extra={"complexity": goal_spec.complexity.value})
         return "plan_step"
     
     # Default to planning for safety
-    logger.debug("Defaulting to planning step for safety", complexity=goal_spec.complexity.value if goal_spec.complexity else None)
+    logger.debug("Defaulting to planning step for safety", extra={"complexity": goal_spec.complexity.value if goal_spec.complexity else None})
     return "plan_step"

@@ -15,6 +15,11 @@ sys.path.insert(0, str(project_root))
 
 from puntini.agents.agent_factory import create_simple_agent, create_agent_with_components
 from puntini.settings import settings
+from langfuse.langchain import CallbackHandler
+from langfuse import Langfuse
+from langfuse import get_client
+import uuid
+
 
 
 @click.group()
@@ -76,16 +81,34 @@ def run(goal: str, config: str | None, verbose: bool, tracer: str):
     
     # Run the agent
     try:
-        with tracer_instance.start_trace("agent-execution") as trace:
-            # Create config with thread_id for checkpointer
-            import uuid
-            thread_id = str(uuid.uuid4())
-            config = {"configurable": {"thread_id": thread_id}}
+        #with tracer_instance.start_trace("agent-execution") as trace:
+        #    # Create config with thread_id for checkpointer
+        #    import uuid
+        #    thread_id = str(uuid.uuid4())
+        #    from puntini.observability.langfuse_callback import LangfuseCallbackHandler
+        #    langfuse_handler =  CallbackHandler()
+        #    config = {"configurable": {"thread_id": thread_id}, "callbacks": [langfuse_handler]}
             
-            result = agent.invoke(initial_state, config=config)
-            click.echo(f"✅ Agent completed successfully!")
-            if verbose:
-                click.echo(f"Result: {result}")
+        #    result = agent.invoke(initial_state, config=config)
+        #    click.echo(f"✅ Agent completed successfully!")
+        #    if verbose:
+        #        click.echo(f"Result: {result}")
+        
+        Langfuse(
+            secret_key=settings.langfuse.secret_key,
+            public_key=settings.langfuse.public_key,
+            host=settings.langfuse.host
+        )   
+        langfuse = get_client()
+        langfuse_handler = CallbackHandler()
+        thread_id = str(uuid.uuid4())
+        config = {"configurable": {"thread_id": thread_id}, "callbacks": [langfuse_handler]}
+        
+        result = agent.invoke(initial_state, config=config)
+        click.echo(f"✅ Agent completed successfully!")
+        if verbose:
+            click.echo(f"Result: {result}")
+        
     except Exception as e:
         click.echo(f"❌ Agent failed: {e}")
         if verbose:
