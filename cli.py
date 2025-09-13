@@ -5,9 +5,20 @@ configurations and options.
 """
 
 import click
+import sys
+from pathlib import Path
 from typing import Any, Dict
-from .agents.agent_factory import create_simple_agent, create_agent_with_components
-from .settings import settings
+
+# Note: Path modification removed to avoid import conflicts
+# The CLI should be run as a module: python -m puntini.cli
+
+from puntini.agents.agent_factory import create_simple_agent, create_agent_with_components
+from puntini.settings import settings
+from langfuse.langchain import CallbackHandler
+from langfuse import Langfuse
+from langfuse import get_client
+import uuid
+
 
 
 @click.group()
@@ -34,11 +45,14 @@ def run(goal: str, config: str | None, verbose: bool, tracer: str):
     
     # Create agent
     if tracer == "noop":
-        from .observability.tracer_factory import create_noop_tracer
+        from puntini.observability.tracer_factory import create_noop_tracer
         tracer_instance = create_noop_tracer()
     elif tracer == "console":
-        from .observability.tracer_factory import create_console_tracer
+        from puntini.observability.tracer_factory import create_console_tracer
         tracer_instance = create_console_tracer()
+    elif tracer == "langfuse":
+        from puntini.observability.tracer_factory import create_langfuse_tracer
+        tracer_instance = create_langfuse_tracer()
     else:
         click.echo(f"❌ Unsupported tracer type: {tracer}")
         return
@@ -66,11 +80,42 @@ def run(goal: str, config: str | None, verbose: bool, tracer: str):
     
     # Run the agent
     try:
-        with tracer_instance.start_trace("agent-execution") as trace:
-            result = agent.invoke(initial_state)
-            click.echo(f"✅ Agent completed successfully!")
-            if verbose:
-                click.echo(f"Result: {result}")
+        #with tracer_instance.start_trace("agent-execution") as trace:
+        #    # Create config with thread_id for checkpointer
+        #    import uuid
+        #    thread_id = str(uuid.uuid4())
+        #    from puntini.observability.langfuse_callback import LangfuseCallbackHandler
+        #    langfuse_handler =  CallbackHandler()
+        #    config = {"configurable": {"thread_id": thread_id}, "callbacks": [langfuse_handler]}
+            
+        #    result = agent.invoke(initial_state, config=config)
+        #    click.echo(f"✅ Agent completed successfully!")
+        #    if verbose:
+        #        click.echo(f"Result: {result}")
+        
+        Langfuse(
+            secret_key=settings.langfuse.secret_key,
+            public_key=settings.langfuse.public_key,
+            host=settings.langfuse.host
+        )   
+        langfuse = get_client()
+        langfuse_handler = CallbackHandler()
+        thread_id = str(uuid.uuid4())
+        
+        # Create LLM for the graph context
+        from puntini.llm.llm_models import LLMFactory
+        llm_factory = LLMFactory()
+        llm = llm_factory.get_default_llm()
+        
+        # Pass LLM through context
+        context = {"llm": llm}
+        config = {"configurable": {"thread_id": thread_id}, "callbacks": [langfuse_handler]}
+        
+        result = agent.invoke(initial_state, config=config, context=context)
+        click.echo(f"✅ Agent completed successfully!")
+        if verbose:
+            click.echo(f"Result: {result}")
+        
     except Exception as e:
         click.echo(f"❌ Agent failed: {e}")
         if verbose:
@@ -105,12 +150,12 @@ def test():
         click.echo("✅ Agent creation: PASSED")
         
         # Test tracer creation
-        from .observability.tracer_factory import create_console_tracer
-        tracer = create_console_tracer()
+        from puntini.observability.tracer_factory import create_langfuse_tracer
+        tracer = create_langfuse_tracer()
         click.echo("✅ Tracer creation: PASSED")
         
         # Test graph store creation
-        from .graph.graph_store_factory import create_memory_graph_store
+        from puntini.graph.graph_store_factory import create_memory_graph_store
         graph_store = create_memory_graph_store()
         click.echo("✅ Graph store creation: PASSED")
         

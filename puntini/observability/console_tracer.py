@@ -123,3 +123,21 @@ class ConsoleContextManager(AbstractContextManager):
         
         if exc_type:
             print(f"{indent}   Error: {exc_val}")
+    
+    def log_io(self, input_data: Any, output_data: Any) -> None:
+        """Log input/output data for this context.
+        
+        Args:
+            input_data: Input data to log.
+            output_data: Output data to log.
+        """
+        self._tracer.log_io(input_data, output_data)
+    
+    def log_decision(self, decision: str, context: dict[str, Any]) -> None:
+        """Log a decision point in this context.
+        
+        Args:
+            decision: Decision that was made.
+            context: Context information for the decision.
+        """
+        self._tracer.log_decision(decision, context)

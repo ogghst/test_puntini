@@ -600,3 +600,4 @@ class TestDataIntegrity:
             target_node = populated_graph_store._nodes[str(edge.target_id)]
             assert target_node.key == edge.target_key
             assert target_node.label == edge.target_label
+
