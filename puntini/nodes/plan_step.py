@@ -5,6 +5,7 @@ micro-step and the candidate tool signature using LLM-based planning.
 """
 
 from typing import Any, Dict, List, Optional
+from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime, get_runtime
@@ -13,6 +14,10 @@ from pydantic import BaseModel, Field
 from ..orchestration.state import State
 from ..llm import LLMFactory
 from ..models.goal_schemas import GoalSpec
+from ..logging import get_logger
+from ..models.errors import ValidationError
+
+
 
 
 class ToolSignature(BaseModel):
@@ -55,6 +60,10 @@ def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Op
         reasoning, and confidence score.
         The LLM is obtained from the graph context to ensure consistency.
     """
+    
+    # Initialize logger for this module
+    logger = get_logger(__name__)
+    
     # Get parsed goal from artifacts
     parsed_goal_data = None
     for artifact in state.get("artifacts", []):
@@ -69,44 +78,31 @@ def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Op
     try:
         # Get LLM from graph context
         if runtime is None:
+
             # Fallback to get_runtime if runtime is not passed directly
             try:
                 runtime = get_runtime()
             except Exception as e:
-                # Fallback to factory if runtime is not available
-                llm_factory = LLMFactory()
-                llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
-            else:
-                # Get the LLM from the context
-                if not hasattr(runtime, 'context') or 'llm' not in runtime.context:
-                    # Fallback to factory if LLM not in context
-                    llm_factory = LLMFactory()
-                    llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
-                else:
-                    llm = runtime.context['llm']
-                    # Handle different LLM types that may not support with_structured_output
-                    try:
-                        llm = llm.with_structured_output(StepPlan)
-                    except (AttributeError, TypeError, Exception) as e:
-                        # Fallback: Use the LLM factory to create a structured version
-                        llm_factory = LLMFactory()
-                        llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
-        else:
-            # Get the LLM from the context
-            if not hasattr(runtime, 'context') or 'llm' not in runtime.context:
-                # Fallback to factory if LLM not in context
-                llm_factory = LLMFactory()
-                llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
-            else:
-                llm = runtime.context['llm']
-                # Handle different LLM types that may not support with_structured_output
-                try:
-                    llm = llm.with_structured_output(StepPlan)
-                except (AttributeError, TypeError, Exception) as e:
-                    # Fallback: Use the LLM factory to create a structured version
-                    llm_factory = LLMFactory()
-                    llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
+                logger.error(f"Failed to get runtime context: {e}")
+                raise ValidationError("Runtime context not available for LLM access")
+
+        # Get the LLM from the context
+        if not hasattr(runtime, 'context') or 'llm' not in runtime.context:
+            logger.error("LLM not found in runtime context")
+            raise ValidationError("LLM not configured in graph context")
+
+        llm : BaseChatModel = runtime.context['llm']
+
+        structured_llm = llm.with_structured_output(StepPlan)
         
+        logger.info(
+            "Using LLM from graph context for step planning",
+            extra={
+                "llm_type": type(llm).__name__,
+                "target_model": StepPlan.__name__
+            }
+        )
+                   
         # Create planning prompt
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an expert at planning graph manipulation steps for an AI agent.
@@ -153,10 +149,10 @@ Plan the next step to move towards achieving this goal.""")
         previous_steps = _get_previous_steps(state)
         
         # Create planning chain
-        planning_chain = prompt | llm
+        planning_chain = prompt | structured_llm
         
         # Generate step plan
-        step_plan = planning_chain.invoke({
+        step_plan : StepPlan = planning_chain.invoke({
             "goal_info": goal_info,
             "progress": "\n".join(progress) if progress else "No progress yet",
             "previous_steps": previous_steps

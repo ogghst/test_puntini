@@ -121,35 +121,40 @@ def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Op
     return plan_step_impl(state, config, runtime)
 
 
-def route_tool(state: State) -> Dict[str, Any]:
+def route_tool(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
     """Route to the appropriate tool or branch.
+    
+    This function delegates to the actual route_tool implementation
+    in the nodes module to maintain separation of concerns.
     
     Args:
         state: Current agent state.
+        config: Optional RunnableConfig for additional configuration.
+        runtime: Optional Runtime context for additional runtime information.
         
     Returns:
         Updated state with routing decision.
     """
-    # TODO: Implement tool routing logic
-    return {
-        "current_step": "call_tool"
-    }
+    from ..nodes.route_tool import route_tool as route_tool_impl
+    return route_tool_impl(state, config, runtime)
 
 
-def call_tool(state: State) -> Dict[str, Any]:
+def call_tool(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
     """Execute the selected tool.
+    
+    This function delegates to the actual call_tool implementation
+    in the nodes module to maintain separation of concerns.
     
     Args:
         state: Current agent state.
+        config: Optional RunnableConfig for additional configuration.
+        runtime: Optional Runtime context for additional runtime information.
         
     Returns:
         Updated state with tool execution result.
     """
-    # TODO: Implement tool execution logic
-    return {
-        "current_step": "evaluate",
-        "result": {"status": "success", "data": {}}
-    }
+    from ..nodes.call_tool import call_tool as call_tool_impl
+    return call_tool_impl(state, config, runtime)
 
 
 def evaluate(state: State) -> Command:
@@ -303,3 +308,5 @@ def create_agent_with_checkpointer(checkpointer_type: str = "memory", **kwargs: 
     """
     checkpointer = create_checkpointer(checkpointer_type, **kwargs)
     return create_agent_graph(checkpointer)
+
+

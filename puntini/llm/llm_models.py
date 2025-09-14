@@ -230,6 +230,9 @@ class LLMFactory:
                             
             if config.max_tokens:
                 model_params["num_predict"] = config.max_tokens
+                
+            config.validate_model_on_init = True
+            #config.format = "json"
             
             return ChatOllama(
                 **model_params

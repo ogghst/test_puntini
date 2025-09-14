@@ -36,10 +36,10 @@ def make_context_manager(cfg: ContextManagerConfig) -> ContextManager:
     """
     if cfg.kind == "progressive":
         # TODO: Implement progressive context manager
-        from ..tools.context_manager import ProgressiveContextManager
+        from .context_manager import ProgressiveContextManager
         return ProgressiveContextManager(cfg.config)
     elif cfg.kind == "simple":
-        from ..tools.context_manager import SimpleContextManager
+        from .context_manager import SimpleContextManager
         return SimpleContextManager(cfg.config)
     else:
         raise ValueError(f"Unsupported context manager type: {cfg.kind}")
