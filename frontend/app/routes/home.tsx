@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/card";
+import { useAuth } from "../components/auth/AuthContext";
 import type { Route } from "./+types/home";
 
 export function meta({}: Route.MetaArgs) {
@@ -21,6 +22,8 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Home() {
+  const { isAuthenticated, logout } = useAuth();
+
   return (
     <>
       <Meta />
@@ -36,9 +39,20 @@ export default function Home() {
                 </h1>
               </div>
               <div className="flex items-center gap-4">
-                <Link to="/dashboard">
-                  <Button>Go to Dashboard</Button>
-                </Link>
+                {isAuthenticated ? (
+                  <>
+                    <Link to="/dashboard">
+                      <Button>Dashboard</Button>
+                    </Link>
+                    <Button variant="outline" onClick={logout}>
+                      Logout
+                    </Button>
+                  </>
+                ) : (
+                  <Link to="/login">
+                    <Button>Login</Button>
+                  </Link>
+                )}
               </div>
             </div>
           </div>
@@ -132,9 +146,15 @@ export default function Home() {
                   with AI?
                 </p>
                 <div className="flex gap-4 justify-center">
-                  <Link to="/dashboard">
-                    <Button size="lg">Open Dashboard</Button>
-                  </Link>
+                  {isAuthenticated ? (
+                    <Link to="/dashboard">
+                      <Button size="lg">Open Dashboard</Button>
+                    </Link>
+                  ) : (
+                    <Link to="/login">
+                      <Button size="lg">Login to Get Started</Button>
+                    </Link>
+                  )}
                   <Link to="/chat">
                     <Button variant="outline" size="lg">
                       Start Chatting

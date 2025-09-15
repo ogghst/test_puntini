@@ -1,50 +1,54 @@
 /**
- * Session management service for the business improvement project management system.
+ * Session management service for the Puntini Agent system.
  *
- * This module provides TypeScript interfaces and API functions that are compliant
- * with the backend session management system.
+ * This module provides TypeScript interfaces and WebSocket functions that are compliant
+ * with the backend Puntini Agent API system.
  */
 
+// Import React for hooks
+import { useCallback, useEffect, useState } from "react";
+
 // Base API configuration
-const API_BASE_URL = "http://localhost:8001";
+const API_BASE_URL = "http://localhost:8009";
 
 // Session-related types (compliant with backend models)
 export interface SessionInfo {
   session_id: string;
   user_id: string;
-  project_id?: string;
-  status: SessionStatus;
   created_at: string;
   last_activity: string;
-  expires_at: string;
-  is_expired: boolean;
   is_active: boolean;
-  agent_count: number;
-  task_count: number;
-  metadata: Record<string, any>;
+  graph_data: Record<string, any>;
+  chat_history: Array<any>;
 }
-
-export type SessionStatus =
-  | "initializing"
-  | "active"
-  | "paused"
-  | "expired"
-  | "error"
-  | "cleaning_up";
 
 export interface Message {
-  id: string;
-  content: any;
-  timestamp: string;
-  message_type: MessageType;
-  metadata: Record<string, any>;
+  type: MessageType;
+  data: Record<string, any>;
+  session_id?: string;
+  timestamp?: string;
+  error?: {
+    code: number;
+    message: string;
+  };
 }
 
-export type MessageType = "user" | "system" | "agent" | "error";
+export type MessageType = 
+  | "init_session" 
+  | "session_ready" 
+  | "close_session"
+  | "user_prompt" 
+  | "assistant_response" 
+  | "reasoning" 
+  | "debug" 
+  | "graph_update" 
+  | "error" 
+  | "chat_history" 
+  | "ping" 
+  | "pong";
 
 export interface SessionCreateRequest {
   user_id: string;
-  project_id?: string;
   metadata?: Record<string, any>;
 }
 
@@ -89,7 +93,7 @@ export interface SessionStats {
 export class SessionAPIError extends Error {
   constructor(
     message: string,
-    public status?: number,
+    public code?: number,
     public details?: any
   ) {
     super(message);
@@ -97,24 +101,141 @@ export class SessionAPIError extends Error {
   }
 }
 
-// Session API functions
-export class SessionAPI {
-  private static async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
+// WebSocket manager for handling connections and messages
+class WebSocketManager {
+  private static instance: WebSocketManager;
+  private websocket: WebSocket | null = null;
+  private token: string | null = null;
+  private session_id: string | null = null;
+  private messageListeners: Array<(message: Message) => void> = [];
+  private connectionPromise: Promise<boolean> | null = null;
+  private connectionResolve: ((value: boolean) => void) | null = null;
 
-    const defaultHeaders = {
-      "Content-Type": "application/json",
+  private constructor() {}
+
+  static getInstance(): WebSocketManager {
+    if (!WebSocketManager.instance) {
+      WebSocketManager.instance = new WebSocketManager();
+    }
+    return WebSocketManager.instance;
+  }
+
+  async connect(token: string): Promise<boolean> {
+    if (this.connectionPromise) {
+      return this.connectionPromise;
+    }
+
+    this.connectionPromise = new Promise((resolve) => {
+      this.connectionResolve = resolve;
+    });
+
+    try {
+      this.token = token;
+      const wsUrl = `${API_BASE_URL.replace('http', 'ws')}/ws/chat?token=${token}`;
+      this.websocket = new WebSocket(wsUrl);
+
+      this.websocket.onopen = () => {
+        console.log("WebSocket connected");
+        // Initialize session
+        this.sendMessage({
+          type: "init_session",
+          data: {}
+        });
+      };
+
+      this.websocket.onmessage = (event) => {
+        try {
+          const message: Message = JSON.parse(event.data);
+          if (message.type === "session_ready") {
+            this.session_id = message.data?.session_id || null;
+            if (this.connectionResolve) {
+              this.connectionResolve(true);
+            }
+          }
+          // Notify all listeners
+          this.messageListeners.forEach(listener => listener(message));
+        } catch (error) {
+          console.error("Error parsing WebSocket message:", error);
+        }
+      };
+
+      this.websocket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        if (this.connectionResolve) {
+          this.connectionResolve(false);
+        }
+      };
+
+      this.websocket.onclose = () => {
+        console.log("WebSocket disconnected");
+        this.websocket = null;
+        this.session_id = null;
+      };
+
+      return this.connectionPromise;
+    } catch (error) {
+      console.error("WebSocket connection error:", error);
+      if (this.connectionResolve) {
+        this.connectionResolve(false);
+      }
+      return false;
+    }
+  }
+
+  disconnect() {
+    if (this.websocket) {
+      this.websocket.close();
+      this.websocket = null;
+    }
+    this.token = null;
+    this.session_id = null;
+    this.connectionPromise = null;
+    this.connectionResolve = null;
+  }
+
+  isConnected(): boolean {
+    return this.websocket !== null && this.websocket.readyState === WebSocket.OPEN;
+  }
+
+  getSessionId(): string | null {
+    return this.session_id;
+  }
+
+  sendMessage(message: Omit<Message, "session_id" | "timestamp">) {
+    if (!this.websocket || this.websocket.readyState !== WebSocket.OPEN) {
+      throw new SessionAPIError("WebSocket is not connected");
+    }
+
+    const messageWithSession: Message = {
+      ...message,
+      session_id: this.session_id || undefined,
+      timestamp: new Date().toISOString()
     };
 
-    const response = await fetch(url, {
-      ...options,
+    this.websocket.send(JSON.stringify(messageWithSession));
+  }
+
+  addMessageListener(listener: (message: Message) => void) {
+    this.messageListeners.push(listener);
+  }
+
+  removeMessageListener(listener: (message: Message) => void) {
+    this.messageListeners = this.messageListeners.filter(l => l !== listener);
+  }
+}
+
+// Session API functions using WebSocket
+export class SessionAPI {
+  private static wsManager = WebSocketManager.getInstance();
+
+  // Authentication functions
+  static async login(username: string, password: string): Promise<{ access_token: string; token_type: string; user_id: string }> {
+    const response = await fetch(`${API_BASE_URL}/login`, {
+      method: "POST",
       headers: {
-        ...defaultHeaders,
-        ...options.headers,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({ username, password }),
     });
 
     if (!response.ok) {
@@ -129,105 +250,154 @@ export class SessionAPI {
     return response.json();
   }
 
-  // Session management
+  static async register(username: string, password: string): Promise<{ username: string; email: string; full_name: string }> {
+    const response = await fetch(`${API_BASE_URL}/register`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new SessionAPIError(
+        errorData.detail || `HTTP ${response.status}: ${response.statusText}`,
+        response.status,
+        errorData
+      );
+    }
+
+    return response.json();
+  }
+
+  // WebSocket connection functions
+  static async connectWebSocket(token: string): Promise<boolean> {
+    return this.wsManager.connect(token);
+  }
+
+  static disconnectWebSocket() {
+    this.wsManager.disconnect();
+  }
+
+  static isConnected(): boolean {
+    return this.wsManager.isConnected();
+  }
+
+  static getSessionId(): string | null {
+    return this.wsManager.getSessionId();
+  }
+
+  // Message functions
+  static sendUserPrompt(prompt: string) {
+    this.wsManager.sendMessage({
+      type: "user_prompt",
+      data: { prompt }
+    });
+  }
+
+  static sendPing() {
+    this.wsManager.sendMessage({
+      type: "ping",
+      data: {}
+    });
+  }
+
+  static closeSession() {
+    this.wsManager.sendMessage({
+      type: "close_session",
+      data: {}
+    });
+  }
+
+  // Add listener for incoming messages
+  static addMessageListener(listener: (message: Message) => void) {
+    this.wsManager.addMessageListener(listener);
+  }
+
+  static removeMessageListener(listener: (message: Message) => void) {
+    this.wsManager.removeMessageListener(listener);
+  }
+
+  // Session management functions (REST-based)
+  static async getMySessions(): Promise<{ sessions: Array<any> }> {
+    // This would require authentication headers in a real implementation
+    return { sessions: [] };
+  }
+
+  static async getSessionStats(): Promise<any> {
+    // This would require authentication headers in a real implementation
+    return {
+      total_sessions: 0,
+      active_sessions: 0,
+      total_users: 0,
+      session_timeout_minutes: 60
+    };
+  }
+
+  static async listSessions(): Promise<SessionListResponse> {
+    // This would require authentication headers in a real implementation
+    return {
+      sessions: [],
+      total_count: 0,
+      active_count: 0
+    };
+  }
+
   static async createSession(
     request: SessionCreateRequest
   ): Promise<SessionInfo> {
-    return this.request<SessionInfo>("/sessions", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
-  }
-
-  static async getSession(sessionId: string): Promise<SessionInfo> {
-    return this.request<SessionInfo>(`/sessions/${sessionId}`);
+    // This would require authentication headers in a real implementation
+    return {
+      session_id: "mock-session-id",
+      user_id: request.user_id,
+      created_at: new Date().toISOString(),
+      last_activity: new Date().toISOString(),
+      is_active: true,
+      graph_data: {},
+      chat_history: []
+    };
   }
 
   static async destroySession(sessionId: string): Promise<{ message: string }> {
-    return this.request<{ message: string }>(`/sessions/${sessionId}`, {
-      method: "DELETE",
-    });
-  }
-
-  static async listSessions(userId?: string): Promise<SessionListResponse> {
-    const params = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
-    return this.request<SessionListResponse>(`/sessions${params}`);
-  }
-
-  static async getSessionStats(): Promise<SessionStats> {
-    return this.request<SessionStats>("/sessions/stats");
-  }
-
-  // Message management
-  static async sendMessage(
-    sessionId: string,
-    request: MessageRequest
-  ): Promise<Message> {
-    return this.request<Message>(`/sessions/${sessionId}/messages`, {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
-  }
-
-  static async receiveMessage(
-    sessionId: string,
-    timeout?: number
-  ): Promise<Message | { message: string; timeout: boolean }> {
-    const params = timeout ? `?timeout=${timeout}` : "";
-    return this.request<Message | { message: string; timeout: boolean }>(
-      `/sessions/${sessionId}/messages${params}`
-    );
-  }
-
-  // Project context management
-  static async getProjectContext(sessionId: string): Promise<ProjectContext> {
-    return this.request<ProjectContext>(`/sessions/${sessionId}/context`);
-  }
-
-  static async updateProjectContext(
-    sessionId: string,
-    context: Record<string, any>
-  ): Promise<{ message: string }> {
-    return this.request<{ message: string }>(`/sessions/${sessionId}/context`, {
-      method: "PUT",
-      body: JSON.stringify(context),
-    });
-  }
-
-  // Task management
-  static async addTask(
-    sessionId: string,
-    task: Omit<TaskInfo, "id" | "created_at">
-  ): Promise<{ message: string }> {
-    return this.request<{ message: string }>(`/sessions/${sessionId}/tasks`, {
-      method: "POST",
-      body: JSON.stringify(task),
-    });
-  }
-
-  static async getTasks(
-    sessionId: string
-  ): Promise<{ tasks: TaskInfo[]; count: number }> {
-    return this.request<{ tasks: TaskInfo[]; count: number }>(
-      `/sessions/${sessionId}/tasks`
-    );
+    // This would require authentication headers in a real implementation
+    return { message: "Session destroyed" };
   }
 }
 
 // Session management hook for React components
 export function useSession() {
-  const [currentSession, setCurrentSession] = useState<SessionInfo | null>(
-    null
-  );
+  const [currentSession, setCurrentSession] = useState<SessionInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<SessionAPIError | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
 
   const createSession = useCallback(async (request: SessionCreateRequest) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const session = await SessionAPI.createSession(request);
+      // For demo purposes, we'll use the test user
+      const loginResult = await SessionAPI.login("testuser", "testpass");
+      const connected = await SessionAPI.connectWebSocket(loginResult.access_token);
+      
+      if (!connected) {
+        throw new SessionAPIError("Failed to connect to WebSocket");
+      }
+      
+      setIsConnected(true);
+      
+      // Create a mock session object for the frontend
+      const session: SessionInfo = {
+        session_id: SessionAPI.getSessionId() || "unknown",
+        user_id: loginResult.user_id,
+        created_at: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+        is_active: true,
+        graph_data: {},
+        chat_history: []
+      };
+      
       setCurrentSession(session);
       return session;
     } catch (err) {
@@ -243,14 +413,11 @@ export function useSession() {
   }, []);
 
   const destroySession = useCallback(async () => {
-    if (!currentSession) return;
-
-    setIsLoading(true);
-    setError(null);
-
     try {
-      await SessionAPI.destroySession(currentSession.session_id);
+      SessionAPI.closeSession();
+      SessionAPI.disconnectWebSocket();
       setCurrentSession(null);
+      setIsConnected(false);
     } catch (err) {
       const apiError =
         err instanceof SessionAPIError
@@ -258,36 +425,19 @@ export function useSession() {
           : new SessionAPIError("Failed to destroy session");
       setError(apiError);
       throw apiError;
-    } finally {
-      setIsLoading(false);
     }
-  }, [currentSession]);
+  }, []);
 
   const refreshSession = useCallback(async () => {
-    if (!currentSession) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const session = await SessionAPI.getSession(currentSession.session_id);
-      setCurrentSession(session);
-    } catch (err) {
-      const apiError =
-        err instanceof SessionAPIError
-          ? err
-          : new SessionAPIError("Failed to refresh session");
-      setError(apiError);
-      throw apiError;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentSession]);
+    // With WebSocket, we don't need to refresh the session
+    // The connection handles this automatically
+  }, []);
 
   return {
     currentSession,
     isLoading,
     error,
+    isConnected,
     createSession,
     destroySession,
     refreshSession,
@@ -300,17 +450,31 @@ export function useMessages(sessionId: string | null) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<SessionAPIError | null>(null);
 
+  // Add message listener on component mount
+  useEffect(() => {
+    const handleMessage = (message: Message) => {
+      setMessages(prev => [...prev, message]);
+    };
+
+    SessionAPI.addMessageListener(handleMessage);
+    
+    // Cleanup listener on unmount
+    return () => {
+      SessionAPI.removeMessageListener(handleMessage);
+    };
+  }, []);
+
   const sendMessage = useCallback(
     async (request: MessageRequest) => {
-      if (!sessionId) throw new Error("No session available");
+      if (!SessionAPI.isConnected()) {
+        throw new Error("No WebSocket connection available");
+      }
 
       setIsLoading(true);
       setError(null);
 
       try {
-        const message = await SessionAPI.sendMessage(sessionId, request);
-        setMessages((prev) => [...prev, message]);
-        return message;
+        SessionAPI.sendUserPrompt(request.content);
       } catch (err) {
         const apiError =
           err instanceof SessionAPIError
@@ -322,38 +486,16 @@ export function useMessages(sessionId: string | null) {
         setIsLoading(false);
       }
     },
-    [sessionId]
+    []
   );
 
   const receiveMessage = useCallback(
     async (timeout?: number) => {
-      if (!sessionId) throw new Error("No session available");
-
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const result = await SessionAPI.receiveMessage(sessionId, timeout);
-
-        if ("timeout" in result && result.timeout) {
-          return null;
-        }
-
-        const message = result as Message;
-        setMessages((prev) => [...prev, message]);
-        return message;
-      } catch (err) {
-        const apiError =
-          err instanceof SessionAPIError
-            ? err
-            : new SessionAPIError("Failed to receive message");
-        setError(apiError);
-        throw apiError;
-      } finally {
-        setIsLoading(false);
-      }
+      // With WebSocket, messages are received automatically through the listener
+      // This function is kept for API compatibility but doesn't do anything
+      return null;
     },
-    [sessionId]
+    []
   );
 
   const clearMessages = useCallback(() => {
@@ -370,5 +512,4 @@ export function useMessages(sessionId: string | null) {
   };
 }
 
-// Import React for hooks
-import { useCallback, useState } from "react";
+

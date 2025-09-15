@@ -1,7 +1,7 @@
-import * as React from "react";
+import { forwardRef } from "react";
 import { cn } from "../../utils/utils";
 
-const Avatar = React.forwardRef<
+const Avatar = forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
@@ -16,7 +16,7 @@ const Avatar = React.forwardRef<
 ));
 Avatar.displayName = "Avatar";
 
-const AvatarImage = React.forwardRef<
+const AvatarImage = forwardRef<
   HTMLImageElement,
   React.ImgHTMLAttributes<HTMLImageElement>
 >(({ className, ...props }, ref) => (
@@ -29,7 +29,7 @@ const AvatarImage = React.forwardRef<
 ));
 AvatarImage.displayName = "AvatarImage";
 
-const AvatarFallback = React.forwardRef<
+const AvatarFallback = forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (

@@ -1,14 +1,14 @@
-import * as React from "react";
+import { forwardRef, cloneElement, Children, isValidElement, useState } from "react";
 import { cn } from "../../utils/utils";
 
-const Tabs = React.forwardRef<
+const Tabs = forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & {
     value?: string;
     onValueChange?: (value: string) => void;
   }
 >(({ className, value, onValueChange, ...props }, ref) => {
-  const [selectedValue, setSelectedValue] = React.useState(value || "");
+  const [selectedValue, setSelectedValue] = useState(value || "");
 
   const handleValueChange = (newValue: string) => {
     setSelectedValue(newValue);
@@ -22,9 +22,9 @@ const Tabs = React.forwardRef<
       data-value={selectedValue}
       {...props}
     >
-      {React.Children.map(props.children, (child) => {
-        if (React.isValidElement(child)) {
-          return React.cloneElement(child, {
+      {Children.map(props.children, (child) => {
+        if (isValidElement(child)) {
+          return cloneElement(child, {
             selectedValue,
             onValueChange: handleValueChange,
           } as React.ReactElement);
@@ -36,7 +36,7 @@ const Tabs = React.forwardRef<
 });
 Tabs.displayName = "Tabs";
 
-const TabsList = React.forwardRef<
+const TabsList = forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & {
     selectedValue?: string;
@@ -64,7 +64,7 @@ const TabsList = React.forwardRef<
 );
 TabsList.displayName = "TabsList";
 
-const TabsTrigger = React.forwardRef<
+const TabsTrigger = forwardRef<
   HTMLButtonElement,
   React.ButtonHTMLAttributes<HTMLButtonElement> & {
     selectedValue?: string;
@@ -91,7 +91,7 @@ const TabsTrigger = React.forwardRef<
 });
 TabsTrigger.displayName = "TabsTrigger";
 
-const TabsContent = React.forwardRef<
+const TabsContent = forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & {
     selectedValue?: string;

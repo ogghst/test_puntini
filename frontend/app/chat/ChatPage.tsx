@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { v4 as uuidv4 } from "uuid";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
@@ -11,7 +11,8 @@ import {
   useMessages,
   useSession,
   type Message as SessionMessage,
-} from "../utils/session";
+} from "@/utils/session";
+import { useAuth } from "../components/auth/AuthContext";
 
 // Define a type for the display message structure
 interface DisplayMessage {
@@ -26,20 +27,16 @@ const getAvatarForSource = (source: DisplayMessage["source"]) => {
   switch (source) {
     case "User":
       return "U";
-    case "triage_agent":
+    case "assistant_response":
       return "A";
-    case "project_management_agent":
-      return "P";
-    case "thinking":
-      return "T";
-    case "log":
-      return "L";
+    case "reasoning":
+      return "R";
     case "debug":
       return "D";
-    case "knowledge_graph_agent":
-      return "K";
+    case "error":
+      return "E";
     default:
-      return "?";
+      return source.charAt(0).toUpperCase();
   }
 };
 
@@ -47,12 +44,14 @@ const getCardColorForSource = (source: DisplayMessage["source"]) => {
   switch (source) {
     case "User":
       return "bg-primary text-primary-foreground";
-    case "triage_agent":
+    case "assistant_response":
       return "bg-secondary text-secondary-foreground";
-    case "project_management_agent":
+    case "reasoning":
       return "bg-muted text-muted-foreground";
-    case "knowledge_graph_agent":
+    case "debug":
       return "bg-accent text-accent-foreground";
+    case "error":
+      return "bg-destructive text-destructive-foreground";
     default:
       return "bg-card text-card-foreground";
   }
@@ -63,12 +62,14 @@ const ChatPage: React.FC = () => {
   const [input, setInput] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
 
   // Use session management hooks
   const {
     currentSession,
     isLoading: sessionLoading,
     error: sessionError,
+    isConnected,
     createSession,
   } = useSession();
   const {
@@ -82,7 +83,7 @@ const ChatPage: React.FC = () => {
     const initializeSession = async () => {
       try {
         await createSession({
-          user_id: "frontend_user",
+          user_id: user?.username || "testuser",
           metadata: { source: "chat_page" },
         });
       } catch (err) {
@@ -96,42 +97,49 @@ const ChatPage: React.FC = () => {
     };
 
     initializeSession();
-  }, [createSession]); // Include createSession in dependencies
+  }, [createSession, user]); // Include createSession and user in dependencies
 
   // Convert session messages to display messages
   useEffect(() => {
     const newDisplayMessages = sessionMessages.map(
       (msg: SessionMessage): DisplayMessage => {
         let content = "";
-        let source = "User";
-        let type = "AssistantMessage";
+        let source = "unknown";
+        let type = "message";
 
-        if (msg.content) {
-          if (typeof msg.content === "string") {
-            content = msg.content;
-          } else if (Array.isArray(msg.content)) {
-            content = msg.content
-              .map((item: unknown) =>
-                typeof item === "string" ? item : JSON.stringify(item)
-              )
-              .join(" ");
-          } else {
-            content = JSON.stringify(msg.content);
-          }
-        }
-
-        if (msg.message_type) {
-          source = msg.message_type === "user" ? "User" : msg.message_type;
-          type =
-            msg.message_type === "user" ? "UserMessage" : "AssistantMessage";
+        // Extract content based on message type
+        if (msg.type === "user_prompt") {
+          content = msg.data?.prompt || "";
+          source = "User";
+          type = "UserMessage";
+        } else if (msg.type === "assistant_response") {
+          content = msg.data?.text || "";
+          source = "assistant_response";
+          type = "AssistantMessage";
+        } else if (msg.type === "reasoning") {
+          content = msg.data?.steps?.join("\n") || JSON.stringify(msg.data);
+          source = "reasoning";
+          type = "ReasoningMessage";
+        } else if (msg.type === "debug") {
+          content = msg.data?.message || JSON.stringify(msg.data);
+          source = "debug";
+          type = "DebugMessage";
+        } else if (msg.type === "error") {
+          content = msg.error?.message || JSON.stringify(msg.error);
+          source = "error";
+          type = "ErrorMessage";
+        } else {
+          content = JSON.stringify(msg.data || msg);
+          source = msg.type || "unknown";
+          type = "OtherMessage";
         }
 
         return {
-          id: msg.id,
+          id: uuidv4(),
           text: content,
           source: source,
           type: type,
-          timestamp: msg.timestamp,
+          timestamp: msg.timestamp || new Date().toISOString(),
         };
       }
     );
@@ -141,17 +149,17 @@ const ChatPage: React.FC = () => {
 
   // Add welcome message when session is created
   useEffect(() => {
-    if (currentSession && displayMessages.length === 0) {
+    if (isConnected && displayMessages.length === 0) {
       const welcomeMessage: DisplayMessage = {
         id: uuidv4(),
         text: "Hello! How can I help you with your project today?",
-        type: "triage_agent",
-        source: "triage_agent",
+        type: "assistant_response",
+        source: "assistant_response",
         timestamp: new Date().toISOString(),
       };
       setDisplayMessages([welcomeMessage]);
     }
-  }, [currentSession, displayMessages.length]);
+  }, [isConnected, displayMessages.length]);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -165,7 +173,7 @@ const ChatPage: React.FC = () => {
   }, [displayMessages]);
 
   const handleSend = async () => {
-    if (input.trim() !== "" && currentSession && !messageLoading) {
+    if (input.trim() !== "" && isConnected && !messageLoading) {
       try {
         // Add user message to display immediately
         const userMessage: DisplayMessage = {
@@ -180,8 +188,6 @@ const ChatPage: React.FC = () => {
         // Send message to session
         await sendMessage({
           content: input,
-          message_type: "user",
-          metadata: { timestamp: new Date().toISOString() },
         });
 
         setInput("");
@@ -283,11 +289,11 @@ const ChatPage: React.FC = () => {
               handleSend();
             }
           }}
-          disabled={messageLoading || !currentSession}
+          disabled={messageLoading || !isConnected}
         />
         <Button
           onClick={handleSend}
-          disabled={messageLoading || !currentSession}
+          disabled={messageLoading || !isConnected}
         >
           Send
         </Button>

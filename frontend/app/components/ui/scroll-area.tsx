@@ -1,7 +1,7 @@
-import * as React from "react"
+import { forwardRef } from "react"
 import { cn } from "../../utils/utils"
 
-const ScrollArea = React.forwardRef<
+const ScrollArea = forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
@@ -13,7 +13,7 @@ const ScrollArea = React.forwardRef<
 ))
 ScrollArea.displayName = "ScrollArea"
 
-const ScrollBar = React.forwardRef<
+const ScrollBar = forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (

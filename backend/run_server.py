@@ -5,8 +5,8 @@ This script demonstrates how to use the new server configuration system
 to start the FastAPI server with settings from config.json.
 """
 
+import uvicorn
 from puntini.utils.settings import Settings
-from puntini.api.app import run_server
 
 
 def main():
@@ -29,12 +29,21 @@ def main():
     print(f"  Docs URL: {server_config['docs_url']}")
     print(f"  OpenAPI URL: {server_config['openapi_url']}")
     
-    # Run the server
+    # Run the server with import string to support reload and workers
     print(f"\nStarting server on http://{server_config['host']}:{server_config['port']}")
     print(f"API documentation will be available at: http://{server_config['host']}:{server_config['port']}{server_config['docs_url']}")
     print("Press Ctrl+C to stop the server\n")
     
-    run_server(settings)
+    # Use import string for the app to support reload and workers
+    uvicorn.run(
+        "puntini.api.app:app",
+        host=server_config["host"],
+        port=server_config["port"],
+        reload=server_config["reload"],
+        workers=server_config["workers"],
+        access_log=server_config["access_log"],
+        log_level=server_config["log_level"]
+    )
 
 
 if __name__ == "__main__":

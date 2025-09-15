@@ -95,7 +95,7 @@ Connect to the WebSocket endpoint with the JWT token:
 
 ```javascript
 const token = "your-jwt-token";
-const ws = new WebSocket(`ws://localhost:8000/ws/chat?token=${token}`);
+const ws = new WebSocket(`ws://localhost:8009/ws/chat?token=${token}`);
 
 ws.onopen = () => {
     console.log("Connected to Puntini Agent");

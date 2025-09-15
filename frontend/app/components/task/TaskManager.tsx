@@ -19,12 +19,12 @@ import {
   Save,
   X,
 } from "lucide-react";
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   SessionAPI,
   SessionAPIError,
   type TaskInfo,
-} from "../../utils/session";
+} from "@/utils/session";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";

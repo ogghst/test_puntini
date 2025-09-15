@@ -14,7 +14,7 @@ from typing import Dict, Any
 class PuntiniAPIClient:
     """Client for interacting with the Puntini Agent API."""
     
-    def __init__(self, base_url: str = "ws://localhost:8000"):
+    def __init__(self, base_url: str = "ws://localhost:8009"):
         """Initialize the API client.
         
         Args:

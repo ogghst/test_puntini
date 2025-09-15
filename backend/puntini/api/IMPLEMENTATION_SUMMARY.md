@@ -21,8 +21,8 @@ I have successfully implemented a complete API module for the Puntini Agent syst
 - User registration and login
 - JWT token authentication
 - Session management
-- Health checks
 - Connection statistics
+- Health checks
 
 ✅ **WebSocket Protocol**
 - Real-time bidirectional communication
@@ -37,7 +37,8 @@ I have successfully implemented a complete API module for the Puntini Agent syst
 - `debug` - Debug information
 - `error` - Error handling
 - `ping` / `pong` - Heartbeat
-- `chat_history` - Chat history sync
+- `close_session` - Session termination
+- `graph_update` - Graph structure updates
 
 ✅ **Multi-User Support**
 - In-memory session storage
@@ -75,6 +76,8 @@ uvicorn puntini.api.app:app --host 0.0.0.0 --port 8000 --reload
 - `POST /register` - User registration
 - `GET /me` - Current user info
 - `GET /sessions/stats` - Session statistics
+- `GET /sessions/my` - Current user's sessions
+- `GET /connections/stats` - Connection statistics
 - `GET /health` - Health check
 - `WS /ws/chat` - WebSocket chat endpoint
 

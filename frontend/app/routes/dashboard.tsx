@@ -1,5 +1,6 @@
 import { Meta } from "react-router";
 import { Dashboard } from "../components/dashboard/Dashboard";
+import { ProtectedRoute } from "../components/auth/ProtectedRoute";
 import type { Route } from "./+types/dashboard";
 
 export function meta({}: Route.MetaArgs) {
@@ -16,7 +17,9 @@ export default function DashboardPage() {
   return (
     <>
       <Meta />
-      <Dashboard />
+      <ProtectedRoute>
+        <Dashboard />
+      </ProtectedRoute>
     </>
   );
 }

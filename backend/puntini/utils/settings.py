@@ -117,7 +117,7 @@ class LoggingConfig:
 class ServerConfig:
     """Configuration for FastAPI server settings."""
     host: str = "127.0.0.1"
-    port: int = 8000
+    port: int = 8009
     reload: bool = False
     workers: int = 1
     access_log: bool = True

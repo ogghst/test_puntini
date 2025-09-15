@@ -15,14 +15,14 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   SessionAPI,
   SessionAPIError,
   useSession,
   type SessionInfo,
   type SessionStats,
-} from "../../utils/session";
+} from "@/utils/session";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";

@@ -5,7 +5,7 @@
  * integrating session management, project context, and task management.
  */
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 // import { Button } from '../ui/button';
 import {
@@ -17,15 +17,17 @@ import {
   Users,
 } from "lucide-react";
 import { ChatPage } from "../../chat/ChatPage";
-import { useSession, type SessionInfo } from "../../utils/session";
+import { useSession, type SessionInfo } from "@/utils/session";
 import { ProjectContext } from "../project/ProjectContext";
 import { SessionManager } from "../session/SessionManager";
 import { TaskManager } from "../task/TaskManager";
 import { Badge } from "../ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { useAuth } from "../auth/AuthContext";
 
 export const Dashboard: React.FC = () => {
   const { currentSession } = useSession();
+  const { user } = useAuth();
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(
     null
   );
@@ -53,40 +55,35 @@ export const Dashboard: React.FC = () => {
                   Business Improvement Project Management
                 </h1>
               </div>
-              {currentSession && (
-                <Badge variant="secondary" className="ml-4">
-                  Session: {currentSession.session_id.slice(0, 8)}...
+              {user && (
+                <Badge variant="secondary">
+                  Welcome, {user.full_name || user.username}
                 </Badge>
               )}
             </div>
-
-            <div className="flex items-center gap-4">
-              {currentSession && (
-                <div className="text-sm text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span>Active</span>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {currentSession.agent_count} agents,{" "}
-                    {currentSession.task_count} tasks
-                  </div>
-                </div>
-              )}
-            </div>
+            <nav className="flex items-center space-x-4">
+              <a
+                href="#"
+                className="text-sm font-medium text-gray-700 hover:text-gray-900"
+              >
+                <Settings className="h-5 w-5" />
+              </a>
+            </nav>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Tabs
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="space-y-6"
-        >
-          {/* Navigation Tabs */}
-          <TabsList className="grid w-full grid-cols-5">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
+          <p className="text-gray-600">
+            Manage your business improvement projects and interact with AI agents.
+          </p>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="chat" className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
               Chat
@@ -95,165 +92,37 @@ export const Dashboard: React.FC = () => {
               <Users className="h-4 w-4" />
               Sessions
             </TabsTrigger>
-            <TabsTrigger value="context" className="flex items-center gap-2">
-              <FolderOpen className="h-4 w-4" />
-              Project Context
-            </TabsTrigger>
             <TabsTrigger value="tasks" className="flex items-center gap-2">
               <CheckSquare className="h-4 w-4" />
               Tasks
             </TabsTrigger>
-            <TabsTrigger value="settings" className="flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              Settings
+            <TabsTrigger value="context" className="flex items-center gap-2">
+              <FolderOpen className="h-4 w-4" />
+              Context
             </TabsTrigger>
           </TabsList>
 
-          {/* Chat Tab */}
-          <TabsContent value="chat" className="space-y-6">
+          <TabsContent value="chat" className="mt-6">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5" />
-                  Agent Chat
-                </CardTitle>
-                <p className="text-sm text-gray-600">
-                  Interact with AI agents to manage your business improvement
-                  projects
-                </p>
+                <CardTitle>AI Agent Chat</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="h-[600px]">
-                  <ChatPage />
-                </div>
+                <ChatPage />
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Sessions Tab */}
-          <TabsContent value="sessions" className="space-y-6">
-            <SessionManager
-              onSessionSelect={handleSessionSelect}
-              selectedSessionId={selectedSession?.session_id}
-            />
+          <TabsContent value="sessions" className="mt-6">
+            <SessionManager onSessionSelect={handleSessionSelect} />
           </TabsContent>
 
-          {/* Project Context Tab */}
-          <TabsContent value="context" className="space-y-6">
-            <ProjectContext
-              sessionId={contextSession?.session_id || null}
-              onContextUpdate={(_context) => {
-                // console.log('Context updated:', context);
-              }}
-            />
+          <TabsContent value="tasks" className="mt-6">
+            <TaskManager sessionId={contextSession?.session_id || null} />
           </TabsContent>
 
-          {/* Tasks Tab */}
-          <TabsContent value="tasks" className="space-y-6">
-            <TaskManager
-              sessionId={contextSession?.session_id || null}
-              onTaskUpdate={(_tasks) => {
-                // console.log('Tasks updated:', tasks);
-              }}
-            />
-          </TabsContent>
-
-          {/* Settings Tab */}
-          <TabsContent value="settings" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5" />
-                  Settings
-                </CardTitle>
-                <p className="text-sm text-gray-600">
-                  Configure your application settings
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* API Configuration */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-medium">API Configuration</h3>
-                    <div className="space-y-2">
-                      <label
-                        htmlFor="backend-url"
-                        className="text-sm font-medium text-gray-700"
-                      >
-                        Backend URL
-                      </label>
-                      <input
-                        id="backend-url"
-                        type="text"
-                        value="http://localhost:8001"
-                        disabled
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
-                      />
-                      <p className="text-xs text-gray-500">
-                        Backend API endpoint (read-only)
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Session Configuration */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-medium">
-                      Session Configuration
-                    </h3>
-                    <div className="space-y-2">
-                      <label
-                        htmlFor="current-session"
-                        className="text-sm font-medium text-gray-700"
-                      >
-                        Current Session
-                      </label>
-                      <div className="p-3 bg-gray-50 rounded-md">
-                        {currentSession ? (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium">
-                              {currentSession.session_id}
-                            </p>
-                            <p className="text-xs text-gray-600">
-                              Status: {currentSession.status} | Created:{" "}
-                              {new Date(
-                                currentSession.created_at
-                              ).toLocaleString()}
-                            </p>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-gray-500">
-                            No active session
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Application Info */}
-                <div className="pt-4 border-t border-gray-200">
-                  <h3 className="text-lg font-medium mb-4">
-                    Application Information
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <p className="font-medium text-gray-700">Version</p>
-                      <p className="text-gray-600">0.1.0</p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-700">Environment</p>
-                      <p className="text-gray-600">Development</p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-700">Last Updated</p>
-                      <p className="text-gray-600">
-                        {new Date().toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <TabsContent value="context" className="mt-6">
+            <ProjectContext sessionId={contextSession?.session_id || null} />
           </TabsContent>
         </Tabs>
       </main>
