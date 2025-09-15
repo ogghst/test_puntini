@@ -16,8 +16,8 @@ from typing import Any, Dict, Optional, Union
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
-from ..settings import Settings
-from .custom_formatter import CustomFormatter
+from ..utils.settings import Settings
+from .puntini_formatter import PuntiniFormatter
 
 
 class LoggingService:
@@ -72,13 +72,13 @@ class LoggingService:
     def _setup_formatters(self) -> None:
         """Setup formatters for different output types."""
         # File formatter
-        self._formatters['file'] = CustomFormatter(
+        self._formatters['file'] = PuntiniFormatter(
             fmt='%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d | %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
         
         # Console formatter
-        self._formatters['console'] = CustomFormatter(
+        self._formatters['console'] = PuntiniFormatter(
             fmt='%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d | %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )

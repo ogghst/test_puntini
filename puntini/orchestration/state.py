@@ -4,7 +4,7 @@ This module defines the state schema and reducer functions for the
 LangGraph state machine, ensuring proper state management and updates.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from typing_extensions import Annotated, TypedDict
 from operator import add
 
@@ -13,7 +13,7 @@ class State(TypedDict):
     """State schema for the agent.
     
     The state contains all necessary information for the agent's execution
-    including the goal, plan, progress, failures, and messages.
+    including the goal, plan, progress, failures, messages, and components.
     """
     
     # Core goal and planning
@@ -34,6 +34,12 @@ class State(TypedDict):
     # Results and artifacts
     artifacts: Annotated[List[Dict[str, Any]], add]
     result: Dict[str, Any]
+    
+    # Agent components (shared across all nodes)
+    tool_registry: Optional[Any]  # ToolRegistry
+    graph_store: Optional[Any]    # GraphStore
+    context_manager: Optional[Any] # ContextManager
+    tracer: Optional[Any]         # Tracer
     
     # Private channels for inter-node data
     _tool_signature: Dict[str, Any]

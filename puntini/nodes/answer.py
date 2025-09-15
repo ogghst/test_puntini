@@ -6,9 +6,10 @@ final answer and closes the execution cleanly.
 
 from typing import Any, Dict
 from ..orchestration.state import State
+from .message import AnswerResponse, AnswerResult
 
 
-def answer(state: State) -> Dict[str, Any]:
+def answer(state: State) -> AnswerResponse:
     """Synthesize final answer and close cleanly.
     
     This node creates the final answer based on the execution
@@ -30,16 +31,16 @@ def answer(state: State) -> Dict[str, Any]:
     
     # TODO: Implement actual answer synthesis logic
     # This is a placeholder implementation
-    final_answer = {
-        "status": "completed",
-        "summary": "Task execution completed successfully",
-        "steps_taken": len(progress),
-        "artifacts_created": len(artifacts),
-        "final_result": result
-    }
+    final_answer = AnswerResult(
+        status="completed",
+        summary="Task execution completed successfully",
+        steps_taken=len(progress),
+        artifacts_created=len(artifacts),
+        final_result=result
+    )
     
-    return {
-        "current_step": "complete",
-        "result": final_answer,
-        "progress": [f"Final answer: {final_answer['summary']}"]
-    }
+    return AnswerResponse(
+        current_step="complete",
+        result=final_answer,
+        progress=[f"Final answer: {final_answer.summary}"]
+    )

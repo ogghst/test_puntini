@@ -12,7 +12,7 @@ from langchain.chat_models import init_chat_model
 from langchain_ollama import ChatOllama
 from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_deepseek import ChatDeepSeek
-from ..settings import Settings, LLMProviderConfig
+from ..utils.settings import Settings, LLMProviderConfig
 
 
 class LLMFactory:
@@ -230,6 +230,9 @@ class LLMFactory:
                             
             if config.max_tokens:
                 model_params["num_predict"] = config.max_tokens
+                
+            config.validate_model_on_init = True
+            #config.format = "json"
             
             return ChatOllama(
                 **model_params

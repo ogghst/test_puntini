@@ -12,8 +12,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, Any
 
-from puntini.logging import LoggingService, get_logger, setup_logging, get_logging_service
-from puntini.settings import Settings
+from logging import LoggingService, get_logger, setup_logging, get_logging_service
+from utils.settings import Settings
 
 
 class TestLoggingServiceInitialization:

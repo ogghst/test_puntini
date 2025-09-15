@@ -5,6 +5,7 @@ micro-step and the candidate tool signature using LLM-based planning.
 """
 
 from typing import Any, Dict, List, Optional
+from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime, get_runtime
@@ -13,6 +14,11 @@ from pydantic import BaseModel, Field
 from ..orchestration.state import State
 from ..llm import LLMFactory
 from ..models.goal_schemas import GoalSpec
+from ..logging import get_logger
+from ..models.errors import ValidationError
+from .message import PlanStepResponse, PlanStepResult, Failure
+
+
 
 
 class ToolSignature(BaseModel):
@@ -33,7 +39,7 @@ class StepPlan(BaseModel):
     overall_progress: float = Field(ge=0.0, le=1.0, description="Overall progress towards goal completion")
 
 
-def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
+def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> PlanStepResponse:
     """Plan the next step in the agent's execution using LLM.
     
     This node analyzes the current state, including the parsed goal,
@@ -55,6 +61,10 @@ def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Op
         reasoning, and confidence score.
         The LLM is obtained from the graph context to ensure consistency.
     """
+    
+    # Initialize logger for this module
+    logger = get_logger(__name__)
+    
     # Get parsed goal from artifacts
     parsed_goal_data = None
     for artifact in state.get("artifacts", []):
@@ -69,44 +79,31 @@ def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Op
     try:
         # Get LLM from graph context
         if runtime is None:
+
             # Fallback to get_runtime if runtime is not passed directly
             try:
                 runtime = get_runtime()
             except Exception as e:
-                # Fallback to factory if runtime is not available
-                llm_factory = LLMFactory()
-                llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
-            else:
-                # Get the LLM from the context
-                if not hasattr(runtime, 'context') or 'llm' not in runtime.context:
-                    # Fallback to factory if LLM not in context
-                    llm_factory = LLMFactory()
-                    llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
-                else:
-                    llm = runtime.context['llm']
-                    # Handle different LLM types that may not support with_structured_output
-                    try:
-                        llm = llm.with_structured_output(StepPlan)
-                    except (AttributeError, TypeError, Exception) as e:
-                        # Fallback: Use the LLM factory to create a structured version
-                        llm_factory = LLMFactory()
-                        llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
-        else:
-            # Get the LLM from the context
-            if not hasattr(runtime, 'context') or 'llm' not in runtime.context:
-                # Fallback to factory if LLM not in context
-                llm_factory = LLMFactory()
-                llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
-            else:
-                llm = runtime.context['llm']
-                # Handle different LLM types that may not support with_structured_output
-                try:
-                    llm = llm.with_structured_output(StepPlan)
-                except (AttributeError, TypeError, Exception) as e:
-                    # Fallback: Use the LLM factory to create a structured version
-                    llm_factory = LLMFactory()
-                    llm = llm_factory.create_structured_llm("openai-gpt4", StepPlan)
+                logger.error(f"Failed to get runtime context: {e}")
+                raise ValidationError("Runtime context not available for LLM access")
+
+        # Get the LLM from the context
+        if not hasattr(runtime, 'context') or 'llm' not in runtime.context:
+            logger.error("LLM not found in runtime context")
+            raise ValidationError("LLM not configured in graph context")
+
+        llm : BaseChatModel = runtime.context['llm']
+
+        structured_llm = llm.with_structured_output(StepPlan)
         
+        logger.info(
+            "Using LLM from graph context for step planning",
+            extra={
+                "llm_type": type(llm).__name__,
+                "target_model": StepPlan.__name__
+            }
+        )
+                   
         # Create planning prompt
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an expert at planning graph manipulation steps for an AI agent.
@@ -153,10 +150,10 @@ Plan the next step to move towards achieving this goal.""")
         previous_steps = _get_previous_steps(state)
         
         # Create planning chain
-        planning_chain = prompt | llm
+        planning_chain = prompt | structured_llm
         
         # Generate step plan
-        step_plan = planning_chain.invoke({
+        step_plan : StepPlan = planning_chain.invoke({
             "goal_info": goal_info,
             "progress": "\n".join(progress) if progress else "No progress yet",
             "previous_steps": previous_steps
@@ -165,31 +162,31 @@ Plan the next step to move towards achieving this goal.""")
         # Convert to dictionary for state storage
         planned_step = step_plan.tool_signature.model_dump()
         
-        return {
-            "current_step": "route_tool",
-            "_tool_signature": planned_step,
-            "progress": [f"Planned step {step_plan.step_number}: {planned_step['tool_name']}"],
-            "result": {
-                "status": "success",
-                "step_plan": step_plan.model_dump(),
-                "is_final_step": step_plan.is_final_step,
-                "overall_progress": step_plan.overall_progress
-            }
-        }
+        return PlanStepResponse(
+            current_step="route_tool",
+            tool_signature=planned_step,
+            progress=[f"Planned step {step_plan.step_number}: {planned_step['tool_name']}"],
+            result=PlanStepResult(
+                status="success",
+                step_plan=step_plan.model_dump(),
+                is_final_step=step_plan.is_final_step,
+                overall_progress=step_plan.overall_progress
+            )
+        )
         
     except Exception as e:
         # Handle planning errors gracefully
         error_msg = f"Step planning failed: {str(e)}"
         
-        return {
-            "current_step": "diagnose",
-            "failures": [{"step": "plan_step", "error": error_msg, "attempt": 1}],
-            "result": {
-                "status": "error",
-                "error": error_msg,
-                "error_type": "planning_error"
-            }
-        }
+        return PlanStepResponse(
+            current_step="diagnose",
+            failures=[Failure(step="plan_step", error=error_msg, attempt=1, error_type="planning_error")],
+            result=PlanStepResult(
+                status="error",
+                error=error_msg,
+                error_type="planning_error"
+            )
+        )
 
 
 def _format_goal_info(parsed_goal_data: Dict[str, Any]) -> str:
@@ -253,7 +250,7 @@ def _get_previous_steps(state: State) -> str:
     return "\n".join(recent_progress)
 
 
-def _create_fallback_plan(state: State) -> Dict[str, Any]:
+def _create_fallback_plan(state: State) -> PlanStepResponse:
     """Create a fallback plan when goal parsing is not available.
     
     Args:
@@ -275,20 +272,20 @@ def _create_fallback_plan(state: State) -> Dict[str, Any]:
         "expected_outcome": "Understanding of current graph state"
     }
     
-    return {
-        "current_step": "route_tool",
-        "_tool_signature": planned_step,
-        "progress": [f"Fallback planned step: {planned_step['tool_name']}"],
-        "result": {
-            "status": "success",
-            "step_plan": {
+    return PlanStepResponse(
+        current_step="route_tool",
+        tool_signature=planned_step,
+        progress=[f"Fallback planned step: {planned_step['tool_name']}"],
+        result=PlanStepResult(
+            status="success",
+            step_plan={
                 "step_number": 1,
                 "tool_signature": planned_step,
                 "is_final_step": False,
                 "next_step_hint": "Analyze results and plan next action",
                 "overall_progress": 0.1
             },
-            "is_final_step": False,
-            "overall_progress": 0.1
-        }
-    }
+            is_final_step=False,
+            overall_progress=0.1
+        )
+    )

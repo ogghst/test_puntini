@@ -7,6 +7,7 @@ agent with all its dependencies configured.
 from typing import Any, Dict
 from langgraph.graph import StateGraph
 from ..orchestration.graph import create_agent_graph, create_agent_with_checkpointer
+from ..orchestration.state import State
 from ..interfaces.graph_store import GraphStore
 from ..interfaces.context_manager import ContextManager
 from ..interfaces.tool_registry import ToolRegistry
@@ -92,8 +93,53 @@ def create_agent_with_components(
     Notes:
         This function allows for more control over component
         configuration and is useful for testing and advanced use cases.
+        The components are stored directly in the agent state and are accessible
+        to all nodes during execution. Multiple agents can run concurrently
+        with different configurations.
     """
-    # TODO: Wire components into the agent
-    # This is a placeholder implementation
-    cfg = AgentConfig()
-    return make_agent(cfg)
+    # Create the agent graph
+    from ..orchestration.graph import create_agent_graph
+    return create_agent_graph()
+
+
+def create_initial_state(
+    goal: str,
+    graph_store: GraphStore,
+    context_manager: ContextManager,
+    tool_registry: ToolRegistry,
+    tracer: Tracer,
+    **kwargs
+) -> State:
+    """Create initial state with components.
+    
+    Args:
+        goal: The goal for the agent to achieve.
+        graph_store: Configured graph store instance.
+        context_manager: Configured context manager instance.
+        tool_registry: Configured tool registry instance.
+        tracer: Configured tracer instance.
+        **kwargs: Additional state parameters.
+        
+    Returns:
+        Initial state with all components.
+    """
+    return State(
+        goal=goal,
+        plan=[],
+        progress=[],
+        failures=[],
+        retry_count=0,
+        max_retries=kwargs.get("max_retries", 3),
+        messages=[],
+        current_step="parse_goal",
+        current_attempt=1,
+        artifacts=[],
+        result={},
+        tool_registry=tool_registry,
+        graph_store=graph_store,
+        context_manager=context_manager,
+        tracer=tracer,
+        _tool_signature={},
+        _error_context={},
+        _escalation_context={}
+    )

@@ -6,9 +6,10 @@ and chooses appropriate remediation strategies.
 
 from typing import Any, Dict
 from ..orchestration.state import State
+from .message import DiagnoseResponse, DiagnoseResult, Artifact
 
 
-def diagnose(state: State) -> Dict[str, Any]:
+def diagnose(state: State) -> DiagnoseResponse:
     """Diagnose failures and determine remediation.
     
     This node analyzes the failure that occurred and determines
@@ -30,19 +31,19 @@ def diagnose(state: State) -> Dict[str, Any]:
     
     # TODO: Implement actual diagnosis logic
     # This is a placeholder implementation
-    diagnosis = {
-        "error_classification": "systematic",
-        "remediation_strategy": "escalate",
-        "confidence": 0.7,
-        "recommended_action": "Human intervention required"
-    }
+    diagnosis = DiagnoseResult(
+        error_classification="systematic",
+        remediation_strategy="escalate",
+        confidence=0.7,
+        recommended_action="Human intervention required"
+    )
     
-    return {
-        "current_step": "escalate",
-        "_error_context": {
-            "type": diagnosis["error_classification"],
+    return DiagnoseResponse(
+        current_step="escalate",
+        error_context={
+            "type": diagnosis.error_classification,
             "message": error,
-            "strategy": diagnosis["remediation_strategy"]
+            "strategy": diagnosis.remediation_strategy
         },
-        "artifacts": [{"type": "diagnosis", "data": diagnosis}]
-    }
+        artifacts=[Artifact(type="diagnosis", data=diagnosis.model_dump())]
+    )

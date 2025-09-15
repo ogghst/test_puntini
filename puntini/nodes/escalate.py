@@ -7,6 +7,7 @@ to human input with checkpointing and deterministic resume.
 from typing import Any, Dict
 from langgraph.types import Command
 from ..orchestration.state import State
+from .message import EscalateResponse, EscalateContext
 
 
 def escalate(state: State) -> Command:
@@ -25,25 +26,25 @@ def escalate(state: State) -> Command:
         Escalation should provide clear context and options
         for human decision-making and enable deterministic resume.
     """
-    error_context = state.get("_error_context", {})
+    error_context = state.get("error_context", {})
     
     # TODO: Implement actual escalation logic
     # This is a placeholder implementation
-    escalation_context = {
-        "reason": "Tool execution failed",
-        "error": error_context.get("message", "Unknown error"),
-        "options": [
+    escalation_context = EscalateContext(
+        reason="Tool execution failed",
+        error=error_context.get("message", "Unknown error"),
+        options=[
             "Retry with different parameters",
             "Skip this step",
             "Abort execution"
         ],
-        "recommended_action": "Retry with different parameters"
-    }
+        recommended_action="Retry with different parameters"
+    )
     
     return Command(
         update={
             "current_step": "answer",
-            "_escalation_context": escalation_context
+            "escalation_context": escalation_context.model_dump()
         },
         goto="answer"
     )
