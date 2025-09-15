@@ -106,6 +106,29 @@ from .logging import (
 # LLM factory
 from .llm.llm_models import LLMFactory
 
+# API module
+from .api import (
+    create_app,
+    AuthManager,
+    get_current_user,
+    SessionManager,
+    WebSocketManager,
+    Message,
+    MessageType,
+    UserPrompt,
+    AssistantResponse,
+    Reasoning,
+    Debug,
+    TreeUpdate,
+    Error,
+    SessionReady,
+    InitSession,
+    CloseSession,
+    ChatHistory,
+    Ping,
+    Pong,
+)
+
 # Package metadata
 __version__ = "0.1.0"
 __author__ = "Puntini Agent Team"
@@ -186,4 +209,25 @@ __all__ = [
     
     # LLM factory
     "LLMFactory",
+    
+    # API module
+    "create_app",
+    "AuthManager",
+    "get_current_user",
+    "SessionManager",
+    "WebSocketManager",
+    "Message",
+    "MessageType",
+    "UserPrompt",
+    "AssistantResponse",
+    "Reasoning",
+    "Debug",
+    "TreeUpdate",
+    "Error",
+    "SessionReady",
+    "InitSession",
+    "CloseSession",
+    "ChatHistory",
+    "Ping",
+    "Pong",
 ]
