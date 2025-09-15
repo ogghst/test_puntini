@@ -7,6 +7,7 @@ with support for file rotation, console output, and structured JSON logging.
 from .logger import get_logger, setup_logging, LoggingService, get_logging_service
 from .formatters import create_formatters
 from .handlers import create_handlers
+from .puntini_formatter import PuntiniFormatter
 
 __all__ = [
     "get_logger",
@@ -15,4 +16,5 @@ __all__ = [
     "get_logging_service",
     "create_formatters",
     "create_handlers",
+    "PuntiniFormatter",
 ]

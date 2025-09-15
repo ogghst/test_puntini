@@ -6,9 +6,10 @@ retry, or diagnose based on step results.
 
 from typing import Any, Dict
 from ..orchestration.state import State
+from .message import EvaluateResponse, EvaluateResult
 
 
-def evaluate(state: State) -> Dict[str, Any]:
+def evaluate(state: State) -> EvaluateResponse:
     """Evaluate the step result and decide next action.
     
     This node analyzes the result of the executed step and determines
@@ -32,43 +33,49 @@ def evaluate(state: State) -> Dict[str, Any]:
     max_retries = state.get("max_retries", 3)
     
     # Enhanced evaluation logic
-    evaluation_result = {
-        "status": status,
-        "retry_count": retry_count,
-        "max_retries": max_retries,
-        "evaluation_timestamp": "now",  # Could use actual timestamp
-        "decision_reason": ""
-    }
-    
     if status == "success":
         # Check if the entire goal is complete
         goal_complete = result.get("goal_complete", False)
-        evaluation_result.update({
-            "decision_reason": "Step completed successfully",
-            "goal_complete": goal_complete,
-            "next_action": "continue" if not goal_complete else "complete"
-        })
+        evaluation_result = EvaluateResult(
+            status=status,
+            retry_count=retry_count,
+            max_retries=max_retries,
+            evaluation_timestamp="now",  # Could use actual timestamp
+            decision_reason="Step completed successfully",
+            goal_complete=goal_complete,
+            next_action="continue" if not goal_complete else "complete"
+        )
     elif status == "error":
         if retry_count < max_retries:
-            evaluation_result.update({
-                "decision_reason": f"Error occurred, retrying (attempt {retry_count + 1}/{max_retries})",
-                "next_action": "retry",
-                "retry_count": retry_count + 1
-            })
+            evaluation_result = EvaluateResult(
+                status=status,
+                retry_count=retry_count + 1,
+                max_retries=max_retries,
+                evaluation_timestamp="now",
+                decision_reason=f"Error occurred, retrying (attempt {retry_count + 1}/{max_retries})",
+                next_action="retry"
+            )
         else:
-            evaluation_result.update({
-                "decision_reason": "Max retries exceeded, escalating",
-                "next_action": "escalate",
-                "retry_count": retry_count
-            })
+            evaluation_result = EvaluateResult(
+                status=status,
+                retry_count=retry_count,
+                max_retries=max_retries,
+                evaluation_timestamp="now",
+                decision_reason="Max retries exceeded, escalating",
+                next_action="escalate"
+            )
     else:
-        evaluation_result.update({
-            "decision_reason": "Unknown status, escalating",
-            "next_action": "escalate"
-        })
+        evaluation_result = EvaluateResult(
+            status=status,
+            retry_count=retry_count,
+            max_retries=max_retries,
+            evaluation_timestamp="now",
+            decision_reason="Unknown status, escalating",
+            next_action="escalate"
+        )
     
-    return {
-        "current_step": "evaluate_complete",
-        "result": evaluation_result,
-        "progress": [f"Evaluated step result: {evaluation_result['decision_reason']}"]
-    }
+    return EvaluateResponse(
+        current_step="evaluate_complete",
+        result=evaluation_result,
+        progress=[f"Evaluated step result: {evaluation_result.decision_reason}"]
+    )

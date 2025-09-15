@@ -2,7 +2,7 @@ import json
 import logging
 import sys
 
-class CustomFormatter(logging.Formatter):
+class PuntiniFormatter(logging.Formatter):
     """
     Custom log formatter that adds stack trace information to ERROR and CRITICAL logs
     if it's missing.

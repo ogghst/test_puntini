@@ -12,7 +12,7 @@ from langchain.chat_models import init_chat_model
 from langchain_ollama import ChatOllama
 from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_deepseek import ChatDeepSeek
-from ..settings import Settings, LLMProviderConfig
+from ..utils.settings import Settings, LLMProviderConfig
 
 
 class LLMFactory:

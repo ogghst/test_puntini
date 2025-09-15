@@ -16,6 +16,7 @@ from ..llm import LLMFactory
 from ..models.goal_schemas import GoalSpec
 from ..logging import get_logger
 from ..models.errors import ValidationError
+from .message import PlanStepResponse, PlanStepResult, Failure
 
 
 
@@ -38,7 +39,7 @@ class StepPlan(BaseModel):
     overall_progress: float = Field(ge=0.0, le=1.0, description="Overall progress towards goal completion")
 
 
-def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
+def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> PlanStepResponse:
     """Plan the next step in the agent's execution using LLM.
     
     This node analyzes the current state, including the parsed goal,
@@ -161,31 +162,31 @@ Plan the next step to move towards achieving this goal.""")
         # Convert to dictionary for state storage
         planned_step = step_plan.tool_signature.model_dump()
         
-        return {
-            "current_step": "route_tool",
-            "_tool_signature": planned_step,
-            "progress": [f"Planned step {step_plan.step_number}: {planned_step['tool_name']}"],
-            "result": {
-                "status": "success",
-                "step_plan": step_plan.model_dump(),
-                "is_final_step": step_plan.is_final_step,
-                "overall_progress": step_plan.overall_progress
-            }
-        }
+        return PlanStepResponse(
+            current_step="route_tool",
+            tool_signature=planned_step,
+            progress=[f"Planned step {step_plan.step_number}: {planned_step['tool_name']}"],
+            result=PlanStepResult(
+                status="success",
+                step_plan=step_plan.model_dump(),
+                is_final_step=step_plan.is_final_step,
+                overall_progress=step_plan.overall_progress
+            )
+        )
         
     except Exception as e:
         # Handle planning errors gracefully
         error_msg = f"Step planning failed: {str(e)}"
         
-        return {
-            "current_step": "diagnose",
-            "failures": [{"step": "plan_step", "error": error_msg, "attempt": 1}],
-            "result": {
-                "status": "error",
-                "error": error_msg,
-                "error_type": "planning_error"
-            }
-        }
+        return PlanStepResponse(
+            current_step="diagnose",
+            failures=[Failure(step="plan_step", error=error_msg, attempt=1, error_type="planning_error")],
+            result=PlanStepResult(
+                status="error",
+                error=error_msg,
+                error_type="planning_error"
+            )
+        )
 
 
 def _format_goal_info(parsed_goal_data: Dict[str, Any]) -> str:
@@ -249,7 +250,7 @@ def _get_previous_steps(state: State) -> str:
     return "\n".join(recent_progress)
 
 
-def _create_fallback_plan(state: State) -> Dict[str, Any]:
+def _create_fallback_plan(state: State) -> PlanStepResponse:
     """Create a fallback plan when goal parsing is not available.
     
     Args:
@@ -271,20 +272,20 @@ def _create_fallback_plan(state: State) -> Dict[str, Any]:
         "expected_outcome": "Understanding of current graph state"
     }
     
-    return {
-        "current_step": "route_tool",
-        "_tool_signature": planned_step,
-        "progress": [f"Fallback planned step: {planned_step['tool_name']}"],
-        "result": {
-            "status": "success",
-            "step_plan": {
+    return PlanStepResponse(
+        current_step="route_tool",
+        tool_signature=planned_step,
+        progress=[f"Fallback planned step: {planned_step['tool_name']}"],
+        result=PlanStepResult(
+            status="success",
+            step_plan={
                 "step_number": 1,
                 "tool_signature": planned_step,
                 "is_final_step": False,
                 "next_step_hint": "Analyze results and plan next action",
                 "overall_progress": 0.1
             },
-            "is_final_step": False,
-            "overall_progress": 0.1
-        }
-    }
+            is_final_step=False,
+            overall_progress=0.1
+        )
+    )

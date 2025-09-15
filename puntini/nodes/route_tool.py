@@ -12,6 +12,7 @@ from ..orchestration.state import State
 from ..interfaces.tool_registry import ToolRegistry
 from ..models.errors import ValidationError, NotFoundError
 from ..logging import get_logger
+from .message import RouteToolResponse, RouteToolResult, Artifact, ErrorContext
 
 logger = get_logger(__name__)
 
@@ -20,7 +21,7 @@ def route_tool(
     state: State, 
     config: Optional[RunnableConfig] = None, 
     runtime: Optional[Runtime] = None
-) -> Dict[str, Any]:
+) -> RouteToolResponse:
     """Route to the appropriate tool or branch.
     
     This node determines which tool to execute or which branch
@@ -59,28 +60,28 @@ def route_tool(
     if not tool_name:
         error_msg = "No tool specified in tool signature"
         logger.error(error_msg)
-        return {
-            "current_step": "diagnose",
-            "_error_context": {
-                "type": "validation_error",
-                "message": error_msg,
-                "details": {"missing_field": "tool_name"}
-            }
-        }
+        return RouteToolResponse(
+            current_step="diagnose",
+            error_context=ErrorContext(
+                type="validation_error",
+                message=error_msg,
+                details={"missing_field": "tool_name"}
+            )
+        )
     
     # Get tool registry from state
     tool_registry = state.get("tool_registry")
     if tool_registry is None:
         error_msg = "Tool registry not available in state. Ensure agent is created with create_initial_state()"
         logger.error(error_msg)
-        return {
-            "current_step": "diagnose",
-            "_error_context": {
-                "type": "system_error",
-                "message": error_msg,
-                "details": {"component": "tool_registry", "solution": "Use create_initial_state() to initialize state with components"}
-            }
-        }
+        return RouteToolResponse(
+            current_step="diagnose",
+            error_context=ErrorContext(
+                type="system_error",
+                message=error_msg,
+                details={"component": "tool_registry", "solution": "Use create_initial_state() to initialize state with components"}
+            )
+        )
     
     # Check tool availability
     try:
@@ -88,17 +89,17 @@ def route_tool(
         if tool_name not in available_tools:
             error_msg = f"Tool '{tool_name}' not found in registry. Available tools: {available_tools}"
             logger.error(error_msg)
-            return {
-                "current_step": "diagnose",
-                "_error_context": {
-                    "type": "not_found_error",
-                    "message": error_msg,
-                    "details": {
+            return RouteToolResponse(
+                current_step="diagnose",
+                error_context=ErrorContext(
+                    type="not_found_error",
+                    message=error_msg,
+                    details={
                         "requested_tool": tool_name,
                         "available_tools": available_tools
                     }
-                }
-            }
+                )
+            )
         
         # Get tool specification for validation
         tool_spec = None
@@ -115,18 +116,18 @@ def route_tool(
             if missing_fields:
                 error_msg = f"Missing required arguments for tool '{tool_name}': {missing_fields}"
                 logger.error(error_msg)
-                return {
-                    "current_step": "diagnose",
-                    "_error_context": {
-                        "type": "validation_error",
-                        "message": error_msg,
-                        "details": {
+                return RouteToolResponse(
+                    current_step="diagnose",
+                    error_context=ErrorContext(
+                        type="validation_error",
+                        message=error_msg,
+                        details={
                             "tool_name": tool_name,
                             "missing_fields": missing_fields,
                             "provided_args": list(tool_args.keys())
                         }
-                    }
-                }
+                    )
+                )
         
         # Create routing decision
         routing_decision = {
@@ -141,46 +142,50 @@ def route_tool(
         
         logger.info(f"Successfully routed to tool '{tool_name}' with confidence {confidence}")
         
-        return {
-            "current_step": "call_tool",
-            "_tool_signature": {
+        return RouteToolResponse(
+            current_step="call_tool",
+            tool_signature={
                 **tool_signature,
                 "validation_passed": True,
                 "routing_decision": routing_decision
             },
-            "artifacts": [{"type": "routing_decision", "data": routing_decision}]
-        }
+            artifacts=[Artifact(type="routing_decision", data=routing_decision)],
+            result=RouteToolResult(
+                status="success",
+                routing_decision=routing_decision
+            )
+        )
         
     except NotFoundError as e:
         error_msg = f"Tool not found: {str(e)}"
         logger.error(error_msg)
-        return {
-            "current_step": "diagnose",
-            "_error_context": {
-                "type": "not_found_error",
-                "message": error_msg,
-                "details": {"tool_name": tool_name}
-            }
-        }
+        return RouteToolResponse(
+            current_step="diagnose",
+            error_context=ErrorContext(
+                type="not_found_error",
+                message=error_msg,
+                details={"tool_name": tool_name}
+            )
+        )
     except ValidationError as e:
         error_msg = f"Tool validation failed: {str(e)}"
         logger.error(error_msg)
-        return {
-            "current_step": "diagnose",
-            "_error_context": {
-                "type": "validation_error",
-                "message": error_msg,
-                "details": {"tool_name": tool_name, "args": tool_args}
-            }
-        }
+        return RouteToolResponse(
+            current_step="diagnose",
+            error_context=ErrorContext(
+                type="validation_error",
+                message=error_msg,
+                details={"tool_name": tool_name, "args": tool_args}
+            )
+        )
     except Exception as e:
         error_msg = f"Unexpected error during tool routing: {str(e)}"
         logger.error(error_msg)
-        return {
-            "current_step": "diagnose",
-            "_error_context": {
-                "type": "system_error",
-                "message": error_msg,
-                "details": {"tool_name": tool_name}
-            }
-        }
+        return RouteToolResponse(
+            current_step="diagnose",
+            error_context=ErrorContext(
+                type="system_error",
+                message=error_msg,
+                details={"tool_name": tool_name}
+            )
+        )

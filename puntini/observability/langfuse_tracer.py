@@ -8,7 +8,7 @@ import time
 from contextlib import AbstractContextManager
 from typing import Any, Dict, Optional
 from ..interfaces.tracer import Tracer
-from ..settings import Settings
+from ..utils.settings import Settings
 
 try:
     from langfuse import get_client, Langfuse

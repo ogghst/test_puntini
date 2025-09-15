@@ -15,7 +15,7 @@ This directory contains a comprehensive logging system built on top of Loguru, d
 
 ```python
 from puntini.logging import get_logger, setup_logging
-from puntini.settings import Settings
+from puntini.utils.settings import Settings
 
 # Setup logging
 settings = Settings()

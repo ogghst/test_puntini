@@ -6,7 +6,7 @@ types of tracer implementations for observability.
 
 from typing import Any, Dict, Optional
 from ..interfaces.tracer import Tracer
-from ..settings import Settings
+from ..utils.settings import Settings
 
 
 class TracerConfig:

@@ -16,9 +16,10 @@ from ..orchestration.state import State
 from ..models.goal_schemas import GoalSpec, GoalComplexity
 from ..models.errors import ValidationError
 from ..logging import get_logger
+from .message import ParseGoalResponse, ParseGoalResult, Artifact, Failure, ErrorContext
 
 
-def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
+def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> ParseGoalResponse:
     """Parse the goal and extract structured information using LLM.
     
     This node extracts the goal, constraints, and domain hints from
@@ -187,19 +188,19 @@ Return a GoalSpec object with all extracted information."""),
             }
         )
         
-        result = {
-            "current_step": next_step,
-            "current_attempt": 1,  # Reset attempt counter for next phase
-            "artifacts": [{"type": "parsed_goal", "data": parsed_goal_dict}],
-            "progress": [f"Parsed goal: {parsed_goal_spec.intent}"],
-            "result": {
-                "status": "success",
-                "parsed_goal": parsed_goal_dict,
-                "complexity": parsed_goal_spec.complexity,
-                "requires_graph_ops": parsed_goal_spec.requires_graph_operations(),
-                "is_simple": parsed_goal_spec.is_simple_goal()
-            }
-        }
+        result = ParseGoalResponse(
+            current_step=next_step,
+            current_attempt=1,  # Reset attempt counter for next phase
+            artifacts=[Artifact(type="parsed_goal", data=parsed_goal_dict)],
+            progress=[f"Parsed goal: {parsed_goal_spec.intent}"],
+            result=ParseGoalResult(
+                status="success",
+                parsed_goal=parsed_goal_dict,
+                complexity=parsed_goal_spec.complexity.value if parsed_goal_spec.complexity else None,
+                requires_graph_ops=parsed_goal_spec.requires_graph_operations(),
+                is_simple=parsed_goal_spec.is_simple_goal()
+            )
+        )
         
         logger.info(
             "Goal parsing completed successfully",
@@ -227,17 +228,17 @@ Return a GoalSpec object with all extracted information."""),
             }
         )
         
-        return {
-            "current_step": "escalate",
-            "current_attempt": current_attempt,
-            "failures": [{"step": "parse_goal", "error": error_msg, "attempt": current_attempt, "error_type": "validation_error"}],
-            "result": {
-                "status": "error",
-                "error": error_msg,
-                "error_type": "validation_error",
-                "retryable": False
-            }
-        }
+        return ParseGoalResponse(
+            current_step="escalate",
+            current_attempt=current_attempt,
+            failures=[Failure(step="parse_goal", error=error_msg, attempt=current_attempt, error_type="validation_error")],
+            result=ParseGoalResult(
+                status="error",
+                error=error_msg,
+                error_type="validation_error",
+                retryable=False
+            )
+        )
         
     except Exception as e:
         # Handle other parsing errors gracefully
@@ -268,32 +269,32 @@ Return a GoalSpec object with all extracted information."""),
         # If this is attempt 1, we might try with more context later
         if current_attempt == 1 and error_classification in ["network_error", "unknown_error"]:
             logger.info("First attempt failed, will retry with diagnosis", extra={"attempt": current_attempt, "error_classification": error_classification})
-            return {
-                "current_step": "diagnose",
-                "current_attempt": current_attempt + 1,
-                "failures": [{"step": "parse_goal", "error": error_msg, "attempt": current_attempt, "error_type": error_classification}],
-                "result": {
-                    "status": "error",
-                    "error": error_msg,
-                    "error_type": error_classification,
-                    "retryable": True
-                }
-            }
+            return ParseGoalResponse(
+                current_step="diagnose",
+                current_attempt=current_attempt + 1,
+                failures=[Failure(step="parse_goal", error=error_msg, attempt=current_attempt, error_type=error_classification)],
+                result=ParseGoalResult(
+                    status="error",
+                    error=error_msg,
+                    error_type=error_classification,
+                    retryable=True
+                )
+            )
         else:
             # Multiple attempts failed or non-retryable error, escalate
             logger.error("Multiple attempts failed or non-retryable error, escalating to human", 
                         extra={"attempt": current_attempt, "error_classification": error_classification})
-            return {
-                "current_step": "escalate",
-                "current_attempt": current_attempt,
-                "failures": [{"step": "parse_goal", "error": error_msg, "attempt": current_attempt, "error_type": error_classification}],
-                "result": {
-                    "status": "error",
-                    "error": error_msg,
-                    "error_type": error_classification,
-                    "retryable": error_classification in ["network_error", "unknown_error"]
-                }
-            }
+            return ParseGoalResponse(
+                current_step="escalate",
+                current_attempt=current_attempt,
+                failures=[Failure(step="parse_goal", error=error_msg, attempt=current_attempt, error_type=error_classification)],
+                result=ParseGoalResult(
+                    status="error",
+                    error=error_msg,
+                    error_type=error_classification,
+                    retryable=error_classification in ["network_error", "unknown_error"]
+                )
+            )
 
 
 def _determine_next_step(goal_spec: GoalSpec, current_attempt: int) -> str:

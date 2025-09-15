@@ -13,7 +13,7 @@ from typing import Any, Dict
 # The CLI should be run as a module: python -m puntini.cli
 
 from puntini.agents.agent_factory import create_simple_agent, create_agent_with_components
-from puntini.settings import settings
+from puntini.utils.settings import settings
 from langfuse.langchain import CallbackHandler
 from langfuse import Langfuse
 from langfuse import get_client
