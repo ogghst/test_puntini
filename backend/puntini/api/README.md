@@ -31,7 +31,6 @@ The API supports the following message types as defined in MESSAGING.md:
 - `assistant_response`: Agent response
 - `reasoning`: Step-by-step reasoning process
 - `debug`: Debug information
-- `tree_update`: Tree structure updates
 - `error`: Error messages
 - `ping`/`pong`: Heartbeat messages
 
@@ -39,12 +38,39 @@ The API supports the following message types as defined in MESSAGING.md:
 
 ### Starting the API Server
 
+The server can be started using multiple methods, all of which use the centralized configuration system:
+
+#### Method 1: Direct execution (recommended)
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
-# Start the server
-uvicorn puntini.api.app:app --host 0.0.0.0 --port 8000 --reload
+# Activate virtual environment
+source .venv/bin/activate
+
+# Start the server directly
+python puntini/api/app.py
+```
+
+#### Method 2: Using the example script
+```bash
+# Start using the example script
+python run_server.py
+```
+
+#### Method 3: Traditional uvicorn (manual configuration)
+```bash
+# Start with uvicorn (configuration from config.json)
+uvicorn puntini.api.app:app --host 127.0.0.1 --port 8000 --reload
+```
+
+#### Method 4: Programmatic startup
+```python
+from puntini.utils.settings import Settings
+from puntini.api.app import run_server
+
+settings = Settings()
+run_server(settings)
 ```
 
 ### Authentication
@@ -96,9 +122,6 @@ ws.onmessage = (event) => {
         case "reasoning":
             console.log("Reasoning steps:", message.data.steps);
             break;
-        case "tree_update":
-            console.log("Tree updated:", message.data.delta);
-            break;
     }
 };
 
@@ -113,11 +136,83 @@ ws.send(JSON.stringify({
 
 ## Configuration
 
-The API uses the Puntini settings system for configuration. Key settings include:
+The API uses the centralized Puntini settings system for configuration. All settings are managed through `config.json` and the `Settings` class.
+
+### Server Configuration
+
+Server settings are configured in the `server` section of `config.json`:
+
+```json
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8000,
+    "reload": true,
+    "workers": 1,
+    "access_log": true,
+    "log_level": "info",
+    "root_path": "",
+    "openapi_url": "/openapi.json",
+    "docs_url": "/docs",
+    "redoc_url": "/redoc"
+  }
+}
+```
+
+### Authentication Configuration
+
+Authentication settings include:
 
 - `SECRET_KEY`: JWT secret key (set via environment variable)
 - Session timeout: 1 hour (configurable)
 - CORS: Configured for development (adjust for production)
+
+### LLM Configuration
+
+LLM providers are configured in the `llm` section:
+
+```json
+{
+  "llm": {
+    "default_llm": "ollama-gemma3:4b",
+    "providers": [
+      {
+        "name": "ollama-gemma3:4b",
+        "type": "ollama",
+        "model_name": "gemma3:4b",
+        "temperature": 0.0,
+        "enabled": true
+      }
+    ]
+  }
+}
+```
+
+## Server Configuration Features
+
+The new server configuration system provides several benefits:
+
+### Centralized Configuration
+- All server settings managed through `config.json`
+- Type-safe configuration with Pydantic dataclasses
+- Environment-specific configurations supported
+
+### Flexible Startup Options
+- Multiple ways to start the server (direct, script, programmatic)
+- Automatic configuration loading from settings
+- Development-friendly defaults (auto-reload enabled)
+
+### Production Ready
+- Support for reverse proxy setups with `root_path`
+- Configurable worker processes
+- Customizable API documentation URLs
+- Access logging configuration
+
+### Development Features
+- Auto-reload on code changes
+- Interactive API documentation at `/docs`
+- ReDoc documentation at `/redoc`
+- OpenAPI schema at `/openapi.json`
 
 ## Development
 
@@ -126,6 +221,16 @@ The API uses the Puntini settings system for configuration. Key settings include
 ```bash
 # Run API tests
 pytest puntini/api/tests/
+```
+
+### Configuration Testing
+
+```bash
+# Test configuration loading
+python -c "from puntini.utils.settings import Settings; s = Settings(); print(f'Server: {s.server_host}:{s.server_port}')"
+
+# Test server creation
+python -c "from puntini.api.app import create_app; app = create_app(); print(f'App: {app.title}')"
 ```
 
 ### Adding New Message Types
@@ -145,9 +250,26 @@ The WebSocket manager integrates with the LangGraph agent through streaming. To 
 
 ## Production Considerations
 
+### Configuration
+- Update `config.json` for production settings:
+  - Set `reload: false`
+  - Configure appropriate `workers` count
+  - Set `host: "0.0.0.0"` for external access
+  - Use `root_path` for reverse proxy setups
+- Use environment variables for secrets (API keys, database credentials)
+- Configure proper CORS settings in the application
+
+### Deployment
 - Replace in-memory session storage with Redis or database
-- Configure proper CORS settings
-- Use environment variables for secrets
+- Use the `run_server.py` script for production deployment
+- Configure reverse proxy (nginx, Apache) with proper `root_path`
 - Implement rate limiting
 - Add monitoring and logging
 - Use HTTPS for WebSocket connections
+- Set up proper logging with the configurable logging system
+
+### Security
+- Configure JWT secrets via environment variables
+- Use secure session management
+- Implement proper authentication flows
+- Configure CORS for production domains only

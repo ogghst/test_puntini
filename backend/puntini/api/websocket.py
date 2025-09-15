@@ -20,7 +20,7 @@ from .models import (
     AssistantResponse,
     Reasoning,
     Debug,
-    TreeUpdate,
+    
     Error,
     SessionReady,
     InitSession,
@@ -236,7 +236,7 @@ class WebSocketManager:
         ready_message = SessionReady(
             data={
                 "session_id": session_id,
-                "initial_tree": session_data.tree_data,
+                "initial_graph": session_data.graph_data,
                 "status": "ready"
             },
             session_id=session_id

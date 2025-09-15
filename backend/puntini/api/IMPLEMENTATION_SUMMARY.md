@@ -35,7 +35,6 @@ I have successfully implemented a complete API module for the Puntini Agent syst
 - `user_prompt` / `assistant_response` - Chat communication
 - `reasoning` - Step-by-step agent reasoning
 - `debug` - Debug information
-- `tree_update` - Tree structure modifications
 - `error` - Error handling
 - `ping` / `pong` - Heartbeat
 - `chat_history` - Chat history sync
@@ -169,7 +168,7 @@ The API module integrates seamlessly with the existing Puntini codebase:
 ## Next Steps
 
 1. **Frontend Integration**: Create React frontend using the WebSocket API
-2. **Advanced Features**: Implement tree visualization, real-time collaboration
+2. **Advanced Features**: Implement graph visualization, real-time collaboration
 3. **Production Deployment**: Add Docker, CI/CD, monitoring
 4. **Performance**: Optimize for high-concurrency scenarios
 5. **Security**: Add rate limiting, input validation, audit logging

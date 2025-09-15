@@ -114,6 +114,21 @@ class LoggingConfig:
 
 
 @dataclass
+class ServerConfig:
+    """Configuration for FastAPI server settings."""
+    host: str = "127.0.0.1"
+    port: int = 8000
+    reload: bool = False
+    workers: int = 1
+    access_log: bool = True
+    log_level: str = "info"
+    root_path: str = ""
+    openapi_url: str = "/openapi.json"
+    docs_url: str = "/docs"
+    redoc_url: str = "/redoc"
+
+
+@dataclass
 class DevelopmentConfig:
     """Configuration for development and debugging."""
     debug: bool = False
@@ -164,6 +179,7 @@ class Settings:
         self.neo4j = Neo4jConfig(**config.get('neo4j', {}))
         self.agent = AgentConfig(**config.get('agent', {}))
         self.logging = LoggingConfig(**config.get('logging', {}))
+        self.server = ServerConfig(**config.get('server', {}))
         self.dev = DevelopmentConfig(**config.get('dev', {}))
     
     def _load_config(self) -> Dict[str, Any]:
@@ -209,6 +225,26 @@ class Settings:
     def debug(self) -> bool:
         """Get debug mode status."""
         return self.dev.debug
+    
+    @property
+    def server_host(self) -> str:
+        """Get server host."""
+        return self.server.host
+    
+    @property
+    def server_port(self) -> int:
+        """Get server port."""
+        return self.server.port
+    
+    @property
+    def server_reload(self) -> bool:
+        """Get server reload setting."""
+        return self.server.reload
+    
+    @property
+    def server_workers(self) -> int:
+        """Get server workers count."""
+        return self.server.workers
     
     def get_llm_config(self, name: str) -> Optional[LLMProviderConfig]:
         """Get LLM configuration by name.
@@ -381,6 +417,25 @@ class Settings:
             "logs_path": self.logging.logs_path,
         }
     
+    def get_server_config(self) -> Dict[str, Any]:
+        """Get server configuration.
+        
+        Returns:
+            Dictionary with server configuration.
+        """
+        return {
+            "host": self.server.host,
+            "port": self.server.port,
+            "reload": self.server.reload,
+            "workers": self.server.workers,
+            "access_log": self.server.access_log,
+            "log_level": self.server.log_level,
+            "root_path": self.server.root_path,
+            "openapi_url": self.server.openapi_url,
+            "docs_url": self.server.docs_url,
+            "redoc_url": self.server.redoc_url,
+        }
+    
     def get_agent_config(self) -> Dict[str, Any]:
         """Get agent configuration.
         
@@ -487,6 +542,18 @@ class Settings:
                 "backup_count": self.logging.backup_count,
                 "log_file": self.logging.log_file,
                 "logs_path": self.logging.logs_path,
+            },
+            "server": {
+                "host": self.server.host,
+                "port": self.server.port,
+                "reload": self.server.reload,
+                "workers": self.server.workers,
+                "access_log": self.server.access_log,
+                "log_level": self.server.log_level,
+                "root_path": self.server.root_path,
+                "openapi_url": self.server.openapi_url,
+                "docs_url": self.server.docs_url,
+                "redoc_url": self.server.redoc_url,
             },
             "dev": {
                 "debug": self.dev.debug,

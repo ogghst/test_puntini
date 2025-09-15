@@ -101,7 +101,7 @@ class PuntiniAPIClient:
         if message_type == "session_ready":
             self.session_id = message.get("session_id")
             print(f"✅ Session ready: {self.session_id}")
-            print(f"   Initial tree: {message.get('data', {}).get('initial_tree', {})}")
+            print(f"   Initial graph: {message.get('data', {}).get('initial_graph', {})}")
         
         elif message_type == "assistant_response":
             text = message.get("data", {}).get("text", "")
@@ -121,10 +121,6 @@ class PuntiniAPIClient:
             debug_msg = message.get("data", {}).get("message", "")
             level = message.get("data", {}).get("level", "info")
             print(f"🐛 Debug ({level}): {debug_msg}")
-        
-        elif message_type == "tree_update":
-            delta = message.get("data", {}).get("delta", {})
-            print(f"🌳 Tree update: {delta}")
         
         elif message_type == "error":
             error_code = message.get("error", {}).get("code", "unknown")

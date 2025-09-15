@@ -27,7 +27,7 @@ class MessageType(str, Enum):
     # System messages
     REASONING = "reasoning"
     DEBUG = "debug"
-    TREE_UPDATE = "tree_update"
+    GRAPH_UPDATE = "graph_update"
     ERROR = "error"
     CHAT_HISTORY = "chat_history"
     
@@ -72,7 +72,7 @@ class SessionReady(BaseMessage):
     data: Dict[str, Any] = Field(
         default_factory=lambda: {
             "session_id": str(uuid4()),
-            "initial_tree": {},
+            "initial_graph": {},
             "status": "ready"
         },
         description="Session initialization data"
@@ -212,13 +212,13 @@ class Debug(BaseMessage):
         )
 
 
-class TreeUpdate(BaseMessage):
-    """Tree structure update message."""
+class GraphUpdate(BaseMessage):
+    """Graph structure update message."""
     
-    type: MessageType = Field(default=MessageType.TREE_UPDATE, description="Message type")
+    type: MessageType = Field(default=MessageType.GRAPH_UPDATE, description="Message type")
     data: Dict[str, Any] = Field(
         ...,
-        description="Tree update data containing delta operations"
+        description="Graph update data containing delta operations"
     )
     
     @classmethod
@@ -226,15 +226,15 @@ class TreeUpdate(BaseMessage):
         cls,
         delta: Dict[str, Any],
         session_id: Optional[str] = None
-    ) -> "TreeUpdate":
-        """Create a tree update message.
+    ) -> "GraphUpdate":
+        """Create a graph update message.
         
         Args:
-            delta: Tree delta operation data.
+            delta: Graph delta operation data.
             session_id: Optional session identifier.
             
         Returns:
-            TreeUpdate message instance.
+            GraphUpdate message instance.
         """
         return cls(
             data={"delta": delta},
@@ -331,7 +331,7 @@ MessageUnion = Union[
     AssistantResponse,
     Reasoning,
     Debug,
-    TreeUpdate,
+    GraphUpdate,
     Error,
     ChatHistory,
     Ping,
@@ -367,8 +367,8 @@ def parse_message(data: Dict[str, Any]) -> MessageUnion:
         return Reasoning(**data)
     elif message_type == MessageType.DEBUG:
         return Debug(**data)
-    elif message_type == MessageType.TREE_UPDATE:
-        return TreeUpdate(**data)
+    elif message_type == MessageType.GRAPH_UPDATE:
+        return GraphUpdate(**data)
     elif message_type == MessageType.ERROR:
         return Error(**data)
     elif message_type == MessageType.CHAT_HISTORY:

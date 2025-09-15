@@ -9,7 +9,7 @@ from puntini.api.models import (
     AssistantResponse,
     Reasoning,
     Debug,
-    TreeUpdate,
+    GraphUpdate,
     Error,
     SessionReady,
     InitSession,
@@ -60,15 +60,6 @@ class TestMessageTypes:
         assert debug.data["level"] == "warning"
         assert debug.session_id == "session-123"
     
-    def test_tree_update_creation(self):
-        """Test TreeUpdate message creation."""
-        delta = {"action": "add", "path": "/root", "node": {"id": "1", "value": "test"}}
-        tree_update = TreeUpdate.create(delta, "session-123")
-        
-        assert tree_update.type == MessageType.TREE_UPDATE
-        assert tree_update.data["delta"] == delta
-        assert tree_update.session_id == "session-123"
-    
     def test_error_creation(self):
         """Test Error message creation."""
         error = Error.create(400, "Bad request", "session-123")
@@ -84,7 +75,7 @@ class TestMessageTypes:
         
         assert ready.type == MessageType.SESSION_READY
         assert "session_id" in ready.data
-        assert "initial_tree" in ready.data
+        assert "initial_graph" in ready.data
         assert "status" in ready.data
         assert ready.session_id == "session-123"
     

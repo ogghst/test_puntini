@@ -33,6 +33,28 @@ The agent supports multiple LLM providers (e.g., OpenAI, Anthropic, Ollama). The
 
 This setup allows for easy switching between different models and providers.
 
+## Server Configuration
+
+The FastAPI server configuration is managed through the settings system, allowing for flexible deployment configurations.
+
+- **ServerConfig**: Defines server settings including host, port, reload mode, workers, and API documentation URLs.
+- **Configuration Options**:
+  - `host`: Server host address (default: "127.0.0.1")
+  - `port`: Server port number (default: 8000)
+  - `reload`: Auto-reload on code changes (default: False)
+  - `workers`: Number of worker processes (default: 1)
+  - `access_log`: Enable access logging (default: True)
+  - `log_level`: Server log level (default: "info")
+  - `root_path`: Root path for reverse proxy setups (default: "")
+  - `openapi_url`: OpenAPI schema URL (default: "/openapi.json")
+  - `docs_url`: API documentation URL (default: "/docs")
+  - `redoc_url`: ReDoc documentation URL (default: "/redoc")
+
+The server can be started using multiple methods:
+1. Direct execution: `python puntini/api/app.py`
+2. Using the example script: `python run_server.py`
+3. Programmatically: `run_server(settings)`
+
 
 ## Logging Configuration
 
@@ -272,6 +294,7 @@ ON MATCH  SET t += $props, t.updated_at = timestamp()
 
 - /puntini/
     - agents/ (agent_factory.py)
+    - api/ (app.py, auth.py, session.py, websocket.py, models.py, README.md)
     - context/ (context_manager.py, context_manager_factory.py)
     - graph/ (graph_store_factory.py, in_memory_graph.py)
     - interfaces/ (context_manager.py, error_classifier.py, escalation.py, evaluator.py, executor.py, graph_store.py, planner.py, tool_registry.py, tracer.py)
@@ -282,8 +305,10 @@ ON MATCH  SET t += $props, t.updated_at = timestamp()
     - observability/ (console_tracer.py, langfuse_callback.py, langfuse_tracer.py, noop_tracer.py, tracer_factory.py)
     - orchestration/ (checkpointer.py, graph.py, reducers.py, state.py)
     - tools/ (cypher_qa.py, tool_registry.py, tool_registry_factory.py)
+    - utils/ (settings.py)
     - tests/ (unit/, integration/, e2e/, golden_traces/)
-    - settings.py
+- config.json (configuration file)
+- run_server.py (example server startup script)
 - cli.py (at root)
 
 
@@ -294,6 +319,7 @@ ON MATCH  SET t += $props, t.updated_at = timestamp()
 - ✅ Add BaseEntity and derived models with UUIDv4 id generation in code; prohibit LLM from proposing ids.
 - ✅ Assemble the LangGraph skeleton using the interfaces; return Command for update+goto; enable checkpointer.
 - ✅ Add Langfuse tracer and attach callback handler to the compiled graph; propagate a trace_id across nested calls.
+- ✅ Implement server configuration system with settings integration for FastAPI.
 - ⏳ Implement concrete logic for graph nodes (`call_tool`, `evaluate`, `diagnose`, etc.).
 - ⏳ Implement concrete backends (Neo4j GraphStore, real ContextManager policies).
 
@@ -304,6 +330,8 @@ ON MATCH  SET t += $props, t.updated_at = timestamp()
 - State schema is defined in `/puntini/orchestration/state.py`
 - Graph orchestration skeleton is in `/puntini/orchestration/graph.py` (node logic is mostly placeholder).
 - Tracer implementations are in `/puntini/observability/`
+- FastAPI server configuration is integrated with settings system in `/puntini/api/app.py`
+- Server configuration is managed through `config.json` with `ServerConfig` dataclass
 
 
 ## Coding Standards

@@ -20,7 +20,7 @@ class SessionData:
         self,
         session_id: str,
         user_id: str,
-        tree_data: Optional[Dict[str, Any]] = None,
+        graph_data: Optional[Dict[str, Any]] = None,
         chat_history: Optional[List[Dict[str, Any]]] = None,
         created_at: Optional[datetime] = None
     ):
@@ -29,13 +29,13 @@ class SessionData:
         Args:
             session_id: Unique session identifier.
             user_id: User identifier.
-            tree_data: Current tree state.
+            graph_data: Current graph state.
             chat_history: Chat message history.
             created_at: Session creation timestamp.
         """
         self.session_id = session_id
         self.user_id = user_id
-        self.tree_data = tree_data or {}
+        self.graph_data = graph_data or {}
         self.chat_history = chat_history or []
         self.created_at = created_at or datetime.utcnow()
         self.last_activity = datetime.utcnow()
@@ -57,25 +57,25 @@ class SessionData:
         })
         self.update_activity()
     
-    def update_tree(self, tree_delta: Dict[str, Any]) -> None:
-        """Update tree data with a delta.
+    def update_graph(self, graph_delta: Dict[str, Any]) -> None:
+        """Update graph data with a delta.
         
         Args:
-            tree_delta: Tree delta operation data.
+            graph_delta: Graph delta operation data.
         """
-        # Apply delta to tree data
-        action = tree_delta.get("action")
+        # Apply delta to graph data
+        action = graph_delta.get("action")
         if action == "add":
-            self._apply_add_delta(tree_delta)
+            self._apply_add_delta(graph_delta)
         elif action == "update":
-            self._apply_update_delta(tree_delta)
+            self._apply_update_delta(graph_delta)
         elif action == "delete":
-            self._apply_delete_delta(tree_delta)
+            self._apply_delete_delta(graph_delta)
         
         self.update_activity()
     
     def _apply_add_delta(self, delta: Dict[str, Any]) -> None:
-        """Apply an add delta to tree data.
+        """Apply an add delta to graph data.
         
         Args:
             delta: Add delta operation.
@@ -84,15 +84,15 @@ class SessionData:
         node = delta.get("node", {})
         
         if path == "/":
-            if "children" not in self.tree_data:
-                self.tree_data["children"] = []
-            self.tree_data["children"].append(node)
+            if "children" not in self.graph_data:
+                self.graph_data["children"] = []
+            self.graph_data["children"].append(node)
         else:
             # Navigate to path and add node
             self._navigate_and_add(path, node)
     
     def _apply_update_delta(self, delta: Dict[str, Any]) -> None:
-        """Apply an update delta to tree data.
+        """Apply an update delta to graph data.
         
         Args:
             delta: Update delta operation.
@@ -104,7 +104,7 @@ class SessionData:
         self._navigate_and_update(path, updates)
     
     def _apply_delete_delta(self, delta: Dict[str, Any]) -> None:
-        """Apply a delete delta to tree data.
+        """Apply a delete delta to graph data.
         
         Args:
             delta: Delete delta operation.
@@ -116,16 +116,16 @@ class SessionData:
         self._navigate_and_delete(path, node_id)
     
     def _navigate_and_add(self, path: str, node: Dict[str, Any]) -> None:
-        """Navigate to path and add node.
+        """Navigate to path and add node to graph data  .
         
         Args:
             path: Path to navigate to.
             node: Node to add.
         """
         # Simple implementation - in production, implement proper path navigation
-        if "children" not in self.tree_data:
-            self.tree_data["children"] = []
-        self.tree_data["children"].append(node)
+        if "children" not in self.graph_data:
+            self.graph_data["children"] = []
+        self.graph_data["children"].append(node)
     
     def _navigate_and_update(self, path: str, updates: Dict[str, Any]) -> None:
         """Navigate to path and update node.
@@ -136,7 +136,7 @@ class SessionData:
         """
         # Simple implementation - in production, implement proper path navigation
         if path == "/":
-            self.tree_data.update(updates)
+            self.graph_data.update(updates)
     
     def _navigate_and_delete(self, path: str, node_id: str) -> None:
         """Navigate to path and delete node.
@@ -146,9 +146,9 @@ class SessionData:
             node_id: ID of node to delete.
         """
         # Simple implementation - in production, implement proper path navigation
-        if "children" in self.tree_data:
-            self.tree_data["children"] = [
-                child for child in self.tree_data["children"]
+        if "children" in self.graph_data:
+            self.graph_data["children"] = [
+                child for child in self.graph_data["children"]
                 if child.get("id") != node_id
             ]
     
@@ -161,7 +161,7 @@ class SessionData:
         return {
             "session_id": self.session_id,
             "user_id": self.user_id,
-            "tree_data": self.tree_data,
+            "graph_data": self.graph_data,
             "chat_history": self.chat_history,
             "created_at": self.created_at.isoformat(),
             "last_activity": self.last_activity.isoformat(),
@@ -253,8 +253,8 @@ class SessionManager:
         if not session:
             return False
         
-        if "tree_data" in updates:
-            session.tree_data = updates["tree_data"]
+        if "graph_data" in updates:
+            session.graph_data = updates["graph_data"]
         if "chat_history" in updates:
             session.chat_history = updates["chat_history"]
         
@@ -278,21 +278,21 @@ class SessionManager:
         session.add_message(message)
         return True
     
-    def update_tree(self, session_id: str, tree_delta: Dict[str, Any]) -> bool:
-        """Update session tree data with delta.
+    def update_graph(self, session_id: str, graph_delta: Dict[str, Any]) -> bool:
+        """Update session graph data with delta.
         
         Args:
             session_id: Session identifier.
-            tree_delta: Tree delta operation.
+            graph_delta: Graph delta operation.
             
         Returns:
-            True if tree was updated, False if session not found.
+            True if graph was updated, False if session not found.
         """
         session = self.sessions.get(session_id)
         if not session:
             return False
         
-        session.update_tree(tree_delta)
+        session.update_graph(graph_delta)
         return True
     
     def close_session(self, session_id: str) -> bool:

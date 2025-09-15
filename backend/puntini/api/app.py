@@ -12,6 +12,7 @@ from typing import Dict, Any
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.websockets import WebSocketDisconnect
 from pydantic import BaseModel
 
 from .auth import AuthManager, get_current_user, auth_manager
@@ -90,11 +91,18 @@ def create_app(settings: Settings = None) -> FastAPI:
     if settings is None:
         settings = Settings()
     
+    # Get server configuration
+    server_config = settings.get_server_config()
+    
     app = FastAPI(
         title="Puntini Agent API",
         description="Real-time messaging API for the Puntini Agent system",
         version="0.1.0",
-        lifespan=lifespan
+        lifespan=lifespan,
+        root_path=server_config["root_path"] if server_config["root_path"] else None,
+        openapi_url=server_config["openapi_url"] if server_config["openapi_url"] else None,
+        docs_url=server_config["docs_url"] if server_config["docs_url"] else None,
+        redoc_url=server_config["redoc_url"] if server_config["redoc_url"] else None
     )
     
     # Add CORS middleware
@@ -238,5 +246,42 @@ def create_app(settings: Settings = None) -> FastAPI:
     return app
 
 
+def run_server(settings: Settings = None):
+    """Run the FastAPI server with configuration from settings.
+    
+    Args:
+        settings: Optional settings instance. If None, creates a new one.
+    """
+    import uvicorn
+    
+    if settings is None:
+        settings = Settings()
+    
+    # Get server configuration
+    server_config = settings.get_server_config()
+    
+    print(f"Starting Puntini Agent API on {server_config['host']}:{server_config['port']}")
+    print(f"Server configuration: {server_config}")
+    
+    # Create the application instance
+    app_instance = create_app(settings)
+    
+    # Run the server
+    uvicorn.run(
+        app_instance,
+        host=server_config["host"],
+        port=server_config["port"],
+        reload=server_config["reload"],
+        workers=server_config["workers"],
+        access_log=server_config["access_log"],
+        log_level=server_config["log_level"]
+    )
+
+
 # Create the application instance
 app = create_app()
+
+
+if __name__ == "__main__":
+    # Run the server when this module is executed directly
+    run_server()
