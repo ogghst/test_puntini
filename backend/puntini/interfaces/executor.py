@@ -4,8 +4,10 @@ This module defines the Executor protocol that handles the execution
 of tools and normalization of their results.
 """
 
-from typing import Any, Protocol
-from ..orchestration.state import State
+from typing import Any, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..orchestration.state_schema import State
 
 
 class Executor(Protocol):

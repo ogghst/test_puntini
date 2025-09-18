@@ -5,21 +5,22 @@ constraints, and domain hints as structured data using LangChain
 and Pydantic models for robust parsing and validation.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime, get_runtime
 from langchain_core.language_models.chat_models import BaseChatModel
 
-from ..orchestration.state import State
+if TYPE_CHECKING:
+    from ..orchestration.state_schema import State
 from ..models.goal_schemas import GoalSpec, GoalComplexity
 from ..models.errors import ValidationError
 from ..logging import get_logger
 from .message import ParseGoalResponse, ParseGoalResult, Artifact, Failure, ErrorContext
 
 
-def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> ParseGoalResponse:
+def parse_goal(state: "State", config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> ParseGoalResponse:
     """Parse the goal and extract structured information using LLM.
     
     This node extracts the goal, constraints, and domain hints from
@@ -47,12 +48,16 @@ def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: O
     # Initialize logger for this module
     logger = get_logger(__name__)
     
-    # Validate state input
-    if not isinstance(state, dict):
-        raise ValidationError("State must be a dictionary")
+    # Validate state input and convert to dict if needed
+    logger.debug(f"State type: {type(state)}, State value: {state}")
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
-    goal = state.get("goal", "")
-    current_attempt = state.get("current_attempt", 1)
+    goal = state_dict.get("goal")
+    current_attempt = state_dict.get("current_attempt", 1)
     
     # Validate required fields
     if not isinstance(goal, str):
@@ -67,7 +72,7 @@ def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: O
         extra={
             "goal_length": len(goal),
             "current_attempt": current_attempt,
-            "state_keys": list(state.keys())
+            "state_type": type(state).__name__
         }
     )
     

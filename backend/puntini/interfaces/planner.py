@@ -4,8 +4,10 @@ This module defines the Planner protocol that handles the planning of
 individual steps in the agent's execution flow.
 """
 
-from typing import Any, Protocol
-from ..orchestration.state import State
+from typing import Any, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..orchestration.state_schema import State
 
 
 class Planner(Protocol):
@@ -15,7 +17,7 @@ class Planner(Protocol):
     execution flow based on the current state and available tools.
     """
     
-    def plan_next_step(self, state: State) -> dict[str, Any]:
+    def plan_next_step(self, state: "State") -> dict[str, Any]:
         """Plan the next step in the agent's execution.
 
         Args:

@@ -7,7 +7,7 @@ agent with all its dependencies configured.
 from typing import Any, Dict
 from langgraph.graph import StateGraph
 from ..orchestration.graph import create_agent_graph, create_agent_with_checkpointer
-from ..orchestration.state import State
+from ..orchestration.state_schema import State
 from ..interfaces.graph_store import GraphStore
 from ..interfaces.context_manager import ContextManager
 from ..interfaces.tool_registry import ToolRegistry

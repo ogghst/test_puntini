@@ -4,8 +4,10 @@ This module defines the ErrorClassifier protocol that handles the classification
 of failures and determination of appropriate remediation strategies.
 """
 
-from typing import Any, Protocol
-from ..orchestration.state import State
+from typing import Any, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..orchestration.state_schema import State
 
 
 class ErrorClassifier(Protocol):

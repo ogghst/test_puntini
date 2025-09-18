@@ -4,12 +4,14 @@ This module implements the answer node that synthesizes the
 final answer and closes the execution cleanly.
 """
 
-from typing import Any, Dict
-from ..orchestration.state import State
+from typing import Any, Dict, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..orchestration.state_schema import State
 from .message import AnswerResponse, AnswerResult
 
 
-def answer(state: State) -> AnswerResponse:
+def answer(state: "State") -> AnswerResponse:
     """Synthesize final answer and close cleanly.
     
     This node creates the final answer based on the execution
@@ -25,9 +27,9 @@ def answer(state: State) -> AnswerResponse:
         The answer should summarize the execution results and
         provide a clear conclusion to the agent's task.
     """
-    result = state.get("result", {})
-    progress = state.get("progress", [])
-    artifacts = state.get("artifacts", [])
+    result = state.result or {}
+    progress = state.progress
+    artifacts = state.artifacts
     
     # TODO: Implement actual answer synthesis logic
     # This is a placeholder implementation

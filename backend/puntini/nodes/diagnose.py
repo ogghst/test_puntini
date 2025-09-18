@@ -4,12 +4,14 @@ This module implements the diagnose node that classifies failures
 and chooses appropriate remediation strategies.
 """
 
-from typing import Any, Dict
-from ..orchestration.state import State
+from typing import Any, Dict, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..orchestration.state_schema import State
 from .message import DiagnoseResponse, DiagnoseResult, Artifact
 
 
-def diagnose(state: State) -> DiagnoseResponse:
+def diagnose(state: "State") -> DiagnoseResponse:
     """Diagnose failures and determine remediation.
     
     This node analyzes the failure that occurred and determines
@@ -25,7 +27,7 @@ def diagnose(state: State) -> DiagnoseResponse:
         Diagnosis should classify errors as identical, random, or
         systematic to determine the appropriate retry strategy.
     """
-    result = state.get("result", {})
+    result = state.result or {}
     error = result.get("error", "Unknown error")
     error_type = result.get("error_type", "unknown")
     

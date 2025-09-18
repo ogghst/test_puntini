@@ -4,12 +4,14 @@ This module implements the evaluate node that decides advance,
 retry, or diagnose based on step results.
 """
 
-from typing import Any, Dict
-from ..orchestration.state import State
+from typing import Any, Dict, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..orchestration.state_schema import State
 from .message import EvaluateResponse, EvaluateResult
 
 
-def evaluate(state: State) -> EvaluateResponse:
+def evaluate(state: "State") -> EvaluateResponse:
     """Evaluate the step result and decide next action.
     
     This node analyzes the result of the executed step and determines
@@ -27,10 +29,10 @@ def evaluate(state: State) -> EvaluateResponse:
         count, and any error patterns. The actual routing is handled
         by conditional edges using the routing functions.
     """
-    result = state.get("result", {})
+    result = state.result or {}
     status = result.get("status", "unknown")
-    retry_count = state.get("retry_count", 0)
-    max_retries = state.get("max_retries", 3)
+    retry_count = state.retry_count
+    max_retries = state.max_retries
     
     # Enhanced evaluation logic
     if status == "success":

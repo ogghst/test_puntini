@@ -4,14 +4,15 @@ This module implements the plan_step node that proposes the next
 micro-step and the candidate tool signature using LLM-based planning.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime, get_runtime
 from pydantic import BaseModel, Field
 
-from ..orchestration.state import State
+if TYPE_CHECKING:
+    from ..orchestration.state_schema import State
 from ..llm import LLMFactory
 from ..models.goal_schemas import GoalSpec
 from ..logging import get_logger
@@ -39,7 +40,7 @@ class StepPlan(BaseModel):
     overall_progress: float = Field(ge=0.0, le=1.0, description="Overall progress towards goal completion")
 
 
-def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> PlanStepResponse:
+def plan_step(state: "State", config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> PlanStepResponse:
     """Plan the next step in the agent's execution using LLM.
     
     This node analyzes the current state, including the parsed goal,
@@ -65,9 +66,17 @@ def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Op
     # Initialize logger for this module
     logger = get_logger(__name__)
     
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
     # Get parsed goal from artifacts
     parsed_goal_data = None
-    for artifact in state.get("artifacts", []):
+    artifacts = state_dict.get("artifacts", [])
+    for artifact in artifacts:
         if artifact.get("type") == "parsed_goal":
             parsed_goal_data = artifact.get("data")
             break
@@ -146,8 +155,8 @@ Plan the next step to move towards achieving this goal.""")
         
         # Prepare context for planning
         goal_info = _format_goal_info(parsed_goal_data)
-        progress = state.get("progress", [])
-        previous_steps = _get_previous_steps(state)
+        progress = state_dict.get("progress", [])
+        previous_steps = _get_previous_steps(state_dict)
         
         # Create planning chain
         planning_chain = prompt | structured_llm
@@ -168,7 +177,7 @@ Plan the next step to move towards achieving this goal.""")
             progress=[f"Planned step {step_plan.step_number}: {planned_step['tool_name']}"],
             result=PlanStepResult(
                 status="success",
-                step_plan=step_plan.model_dump(),
+                step_plan=step_plan,  # Pass the StepPlan object directly
                 is_final_step=step_plan.is_final_step,
                 overall_progress=step_plan.overall_progress
             )
@@ -232,11 +241,11 @@ def _format_goal_info(parsed_goal_data: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _get_previous_steps(state: State) -> str:
+def _get_previous_steps(state: dict) -> str:
     """Get information about previous steps from state.
     
     Args:
-        state: Current agent state.
+        state: Current agent state dictionary.
         
     Returns:
         String describing previous steps.
@@ -250,7 +259,7 @@ def _get_previous_steps(state: State) -> str:
     return "\n".join(recent_progress)
 
 
-def _create_fallback_plan(state: State) -> PlanStepResponse:
+def _create_fallback_plan(state: "State") -> PlanStepResponse:
     """Create a fallback plan when goal parsing is not available.
     
     Args:
@@ -259,7 +268,14 @@ def _create_fallback_plan(state: State) -> PlanStepResponse:
     Returns:
         Basic fallback plan.
     """
-    goal = state.get("goal", "unknown goal")
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    goal = state_dict.get("goal", "Unknown goal")
     
     # Simple fallback planning based on goal text
     planned_step = {
@@ -272,19 +288,28 @@ def _create_fallback_plan(state: State) -> PlanStepResponse:
         "expected_outcome": "Understanding of current graph state"
     }
     
+    # Create a proper StepPlan object for fallback
+    fallback_step_plan = StepPlan(
+        step_number=1,
+        tool_signature=ToolSignature(
+            tool_name=planned_step["tool_name"],
+            tool_args=planned_step["tool_args"],
+            reasoning=planned_step["reasoning"],
+            confidence=planned_step["confidence"],
+            expected_outcome=planned_step["expected_outcome"]
+        ),
+        is_final_step=False,
+        next_step_hint="Analyze results and plan next action",
+        overall_progress=0.1
+    )
+    
     return PlanStepResponse(
         current_step="route_tool",
         tool_signature=planned_step,
         progress=[f"Fallback planned step: {planned_step['tool_name']}"],
         result=PlanStepResult(
             status="success",
-            step_plan={
-                "step_number": 1,
-                "tool_signature": planned_step,
-                "is_final_step": False,
-                "next_step_hint": "Analyze results and plan next action",
-                "overall_progress": 0.1
-            },
+            step_plan=fallback_step_plan,  # Pass the StepPlan object directly
             is_final_step=False,
             overall_progress=0.1
         )

@@ -4,9 +4,12 @@ This module defines Pydantic models for structured outputs from nodes,
 providing type safety and validation for all node responses.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from datetime import datetime
+
+if TYPE_CHECKING:
+    from .plan_step import StepPlan, ToolSignature
 
 
 class Artifact(BaseModel):
@@ -45,6 +48,8 @@ class BaseResponse(BaseModel):
     current_step: str = Field(description="Next step to execute")
     progress: List[str] = Field(default_factory=list, description="Progress messages")
     artifacts: List[Artifact] = Field(default_factory=list, description="Artifacts created during execution")
+    failures: List[Failure] = Field(default_factory=list, description="Failures that occurred")
+    result: Optional[Any] = Field(default=None, description="Execution result")
     error_context: Optional[ErrorContext] = Field(default=None, description="Error context if applicable")
 
 
@@ -103,7 +108,7 @@ class ParseGoalResponse(BaseResponse):
 
 class PlanStepResult(PlanningResult):
     """Result from plan_step node execution."""
-    step_plan: Optional[Dict[str, Any]] = Field(default=None, description="Generated step plan")
+    step_plan: Optional["StepPlan"] = Field(default=None, description="Generated step plan")
 
 
 class PlanStepResponse(BaseResponse):
@@ -189,3 +194,16 @@ NodeResponse = Union[
     EscalateResponse,
     AnswerResponse
 ]
+
+
+# Rebuild models to resolve forward references
+def _rebuild_models():
+    """Rebuild models to resolve forward references."""
+    try:
+        from .plan_step import StepPlan, ToolSignature
+        PlanStepResult.model_rebuild()
+    except ImportError:
+        # Skip rebuild if plan_step module is not available
+        pass
+
+_rebuild_models()

@@ -31,7 +31,7 @@ class PuntiniFormatter(logging.Formatter):
                           'filename', 'funcName', 'levelname', 'levelno', 'lineno', 
                           'module', 'msecs', 'message', 'msg', 'name', 'pathname', 
                           'process', 'processName', 'relativeCreated', 'stack_info', 
-                          'thread', 'threadName']:
+                          'thread', 'threadName', 'taskName']:
                 extra_data[key] = value
         
         if extra_data:

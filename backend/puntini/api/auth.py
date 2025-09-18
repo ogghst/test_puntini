@@ -11,7 +11,7 @@ from typing import Dict, Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 
 from ..utils.settings import Settings
 
@@ -30,8 +30,8 @@ class AuthManager:
         self.algorithm = "HS256"
         self.access_token_expire_minutes = 30
         
-        # Password hashing
-        self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        # Password hashing - using direct bcrypt
+        self.bcrypt_rounds = 12  # Default bcrypt rounds
         
         # Security scheme
         self.security = HTTPBearer()
@@ -40,7 +40,7 @@ class AuthManager:
         self.fake_users_db: Dict[str, Dict[str, str]] = {
             "testuser": {
                 "username": "testuser",
-                "hashed_password": self.pwd_context.hash("testpass"),
+                "hashed_password": self.get_password_hash("testpass"),
                 "email": "test@example.com",
                 "full_name": "Test User"
             }
@@ -56,7 +56,13 @@ class AuthManager:
         Returns:
             True if password matches, False otherwise.
         """
-        return self.pwd_context.verify(plain_password, hashed_password)
+        try:
+            # Convert strings to bytes for bcrypt
+            password_bytes = plain_password.encode('utf-8')
+            hash_bytes = hashed_password.encode('utf-8')
+            return bcrypt.checkpw(password_bytes, hash_bytes)
+        except Exception:
+            return False
     
     def get_password_hash(self, password: str) -> str:
         """Hash a password.
@@ -67,7 +73,13 @@ class AuthManager:
         Returns:
             Hashed password.
         """
-        return self.pwd_context.hash(password)
+        # Convert password to bytes for bcrypt
+        password_bytes = password.encode('utf-8')
+        # Generate salt and hash the password
+        salt = bcrypt.gensalt(rounds=self.bcrypt_rounds)
+        hashed = bcrypt.hashpw(password_bytes, salt)
+        # Return as string
+        return hashed.decode('utf-8')
     
     def authenticate_user(self, username: str, password: str) -> Optional[Dict[str, str]]:
         """Authenticate a user with username and password.

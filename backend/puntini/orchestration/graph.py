@@ -4,15 +4,24 @@ This module defines the main LangGraph state machine with nodes, edges,
 and conditional routing for the agent's execution flow.
 """
 
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional, Union
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.types import Command
 from langgraph.runtime import Runtime
 from langchain_core.runnables import RunnableConfig
 
-from .state import State
+from .state_schema import State
 from .checkpointer import create_checkpointer, get_checkpoint_config
+from ..nodes.message import (
+    ParseGoalResult, EvaluateResult, DiagnoseResult, ErrorContext, EscalateContext,
+    AnswerResult, ParseGoalResponse, PlanStepResponse, RouteToolResponse,
+    CallToolResponse, EvaluateResponse, DiagnoseResponse, EscalateResponse, AnswerResponse
+)
+from ..nodes.return_types import (
+    ParseGoalReturn, PlanStepReturn, RouteToolReturn, CallToolReturn,
+    DiagnoseReturn, AnswerReturn, EvaluateCommandReturn, EscalateCommandReturn
+)
 
 
 def route_after_parse_goal(state: State) -> str:
@@ -24,14 +33,31 @@ def route_after_parse_goal(state: State) -> str:
     Returns:
         The next node to execute.
     """
-    result = state.get("result", {})
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
-    # If parsing failed, route to diagnose
-    if result.get("status") == "error":
+    # Get the parse goal response from state
+    parse_response = state_dict.get("parse_goal_response")
+    
+    # If no response or parsing failed, route to diagnose
+    if not parse_response:
         return "diagnose"
     
-    # If parsing succeeded, use the determined next step
-    return state.get("current_step", "plan_step")
+    # Check if parsing failed (handle both dict and object responses)
+    if isinstance(parse_response, dict):
+        result = parse_response.get("result", {})
+        if result.get("status") == "error":
+            return "diagnose"
+        return parse_response.get("current_step", "diagnose")
+    else:
+        # Handle object response
+        if parse_response.result.status == "error":
+            return "diagnose"
+        return parse_response.current_step
 
 
 def route_after_evaluate(state: State) -> str:
@@ -43,14 +69,36 @@ def route_after_evaluate(state: State) -> str:
     Returns:
         The next node to execute.
     """
-    result = state.get("result", {})
-    status = result.get("status", "unknown")
-    retry_count = state.get("retry_count", 0)
-    max_retries = state.get("max_retries", 3)
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Get the evaluate response from state
+    evaluate_response = state_dict.get("evaluate_response")
+    
+    # If no response, default to escalate
+    if not evaluate_response:
+        return "escalate"
+    
+    # Handle both dict and object responses
+    if isinstance(evaluate_response, dict):
+        result = evaluate_response.get("result", {})
+        status = result.get("status", "error")
+        retry_count = result.get("retry_count", 0)
+        max_retries = result.get("max_retries", 3)
+    else:
+        result = evaluate_response.result
+        status = result.status
+        retry_count = result.retry_count
+        max_retries = result.max_retries
     
     if status == "success":
         # Check if goal is complete
-        if result.get("goal_complete", False):
+        goal_complete = result.get("goal_complete", False) if isinstance(result, dict) else result.goal_complete
+        if goal_complete:
             return "answer"
         else:
             return "plan_step"  # Continue with next step
@@ -69,10 +117,32 @@ def route_after_diagnose(state: State) -> str:
     Returns:
         The next node to execute.
     """
-    result = state.get("result", {})
-    error_context = state.get("_error_context", {})
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
-    error_type = error_context.get("type", "unknown")
+    # Get the diagnose response from state
+    diagnose_response = state_dict.get("diagnose_response")
+    error_context = state_dict.get("error_context")
+    
+    # If no response, default to escalate
+    if not diagnose_response:
+        return "escalate"
+    
+    # Handle both dict and object responses
+    if isinstance(diagnose_response, dict):
+        result = diagnose_response.get("result", {})
+    else:
+        result = diagnose_response.result
+    
+    # Handle error context
+    if isinstance(error_context, dict):
+        error_type = error_context.get("type", "unknown")
+    else:
+        error_type = error_context.type if error_context else "unknown"
     
     if error_type == "identical":
         # Identical error, escalate
@@ -100,10 +170,32 @@ def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: O
         runtime: Optional Runtime context for additional runtime information.
         
     Returns:
-        Updated state with parsed goal information.
+        Dictionary with parsed goal information and state updates.
     """
     from ..nodes.parse_goal import parse_goal as parse_goal_impl
-    return parse_goal_impl(state, config, runtime)
+    
+    # Call the implementation and get the response
+    response = parse_goal_impl(state, config, runtime)
+    
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Create the proper return type and convert to state update
+    return_obj = ParseGoalReturn(
+        current_step=response.current_step,
+        current_attempt=response.current_attempt,
+        progress=state_dict.get("progress", []) + response.progress,
+        artifacts=state_dict.get("artifacts", []) + response.artifacts,
+        failures=state_dict.get("failures", []) + response.failures,
+        result=response.result.model_dump() if response.result else None,
+        parse_goal_response=response
+    )
+    
+    return return_obj.to_state_update()
 
 
 def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
@@ -115,10 +207,31 @@ def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Op
         runtime: Optional Runtime context for additional runtime information.
         
     Returns:
-        Updated state with planned step.
+        Dictionary with planned step information and state updates.
     """
     from ..nodes.plan_step import plan_step as plan_step_impl
-    return plan_step_impl(state, config, runtime)
+    
+    # Call the implementation and get the response
+    response = plan_step_impl(state, config, runtime)
+    
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Create the proper return type and convert to state update
+    return_obj = PlanStepReturn(
+        current_step=response.current_step,
+        progress=state_dict.get("progress", []) + response.progress,
+        artifacts=state_dict.get("artifacts", []) + response.artifacts,
+        failures=state_dict.get("failures", []) + response.failures,
+        result=response.result.model_dump() if response.result else None,
+        plan_step_response=response
+    )
+    
+    return return_obj.to_state_update()
 
 
 def route_tool(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
@@ -133,10 +246,31 @@ def route_tool(state: State, config: Optional[RunnableConfig] = None, runtime: O
         runtime: Optional Runtime context for additional runtime information.
         
     Returns:
-        Updated state with routing decision.
+        Dictionary with routing decision and state updates.
     """
     from ..nodes.route_tool import route_tool as route_tool_impl
-    return route_tool_impl(state, config, runtime)
+    
+    # Call the implementation and get the response
+    response = route_tool_impl(state, config, runtime)
+    
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Create the proper return type and convert to state update
+    return_obj = RouteToolReturn(
+        current_step=response.current_step,
+        progress=state_dict.get("progress", []) + response.progress,
+        artifacts=state_dict.get("artifacts", []) + response.artifacts,
+        failures=state_dict.get("failures", []) + response.failures,
+        result=response.result.model_dump() if response.result else None,
+        route_tool_response=response
+    )
+    
+    return return_obj.to_state_update()
 
 
 def call_tool(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
@@ -151,10 +285,31 @@ def call_tool(state: State, config: Optional[RunnableConfig] = None, runtime: Op
         runtime: Optional Runtime context for additional runtime information.
         
     Returns:
-        Updated state with tool execution result.
+        Dictionary with tool execution result and state updates.
     """
     from ..nodes.call_tool import call_tool as call_tool_impl
-    return call_tool_impl(state, config, runtime)
+    
+    # Call the implementation and get the response
+    response = call_tool_impl(state, config, runtime)
+    
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Create the proper return type and convert to state update
+    return_obj = CallToolReturn(
+        current_step=response.current_step,
+        progress=state_dict.get("progress", []) + response.progress,
+        artifacts=state_dict.get("artifacts", []) + response.artifacts,
+        failures=state_dict.get("failures", []) + response.failures,
+        result=response.result.model_dump() if response.result else None,
+        call_tool_response=response
+    )
+    
+    return return_obj.to_state_update()
 
 
 def evaluate(state: State) -> Command:
@@ -166,8 +321,17 @@ def evaluate(state: State) -> Command:
     Returns:
         Command with next node and state updates.
     """
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
     # TODO: Implement evaluation logic
-    if state.get("result", {}).get("status") == "success":
+    # For now, use a simple evaluation based on current result
+    result = state_dict.get("result")
+    if result and result.get("status") == "success":
         return Command(update={"current_step": "answer"}, goto="answer")
     else:
         return Command(update={"current_step": "diagnose"}, goto="diagnose")
@@ -180,13 +344,53 @@ def diagnose(state: State) -> Dict[str, Any]:
         state: Current agent state.
         
     Returns:
-        Updated state with diagnosis results.
+        Dictionary with diagnosis results and state updates.
     """
     # TODO: Implement diagnosis logic
-    return {
-        "current_step": "escalate",
-        "_error_context": {"type": "systematic", "message": "Unknown error"}
-    }
+    # For now, create a simple diagnosis response
+    from ..nodes.message import DiagnoseResponse, DiagnoseResult, ErrorContext
+    
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Create error context if not present
+    error_context = state_dict.get("error_context") or ErrorContext(
+        type="systematic",
+        message="Unknown error",
+        details={}
+    )
+    
+    # Create diagnosis result
+    diagnosis_result = DiagnoseResult(
+        status="success",
+        error_classification="systematic",
+        remediation_strategy="escalate",
+        confidence=0.8,
+        recommended_action="escalate"
+    )
+    
+    # Create diagnosis response
+    diagnosis_response = DiagnoseResponse(
+        current_step="escalate",
+        result=diagnosis_result
+    )
+    
+    # Create the proper return type and convert to state update
+    return_obj = DiagnoseReturn(
+        current_step="escalate",
+        progress=[],
+        artifacts=[],
+        failures=[],
+        result=diagnosis_result.model_dump(),
+        diagnose_response=diagnosis_response,
+        error_context=error_context
+    )
+    
+    return return_obj.to_state_update()
 
 
 def escalate(state: State) -> Command:
@@ -199,7 +403,38 @@ def escalate(state: State) -> Command:
         Command with escalation handling.
     """
     # TODO: Implement escalation logic
-    return Command(update={"current_step": "answer"}, goto="answer")
+    # For now, create a simple escalation response
+    from ..nodes.message import EscalateResponse, EscalateContext
+    
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Create escalation context if not present
+    escalation_context = state_dict.get("escalation_context") or EscalateContext(
+        reason="Unknown error occurred",
+        error="System error",
+        options=["Retry", "Skip", "Abort"],
+        recommended_action="Retry"
+    )
+    
+    # Create escalation response
+    escalation_response = EscalateResponse(
+        current_step="answer",
+        escalation_context=escalation_context
+    )
+    
+    return Command(
+        update={
+            "escalate_response": escalation_response,
+            "escalation_context": escalation_context,
+            "current_step": "answer"
+        },
+        goto="answer"
+    )
 
 
 def answer(state: State) -> Dict[str, Any]:
@@ -209,13 +444,44 @@ def answer(state: State) -> Dict[str, Any]:
         state: Current agent state.
         
     Returns:
-        Updated state with final answer.
+        Dictionary with final answer and state updates.
     """
     # TODO: Implement answer synthesis logic
-    return {
-        "current_step": "complete",
-        "result": {"answer": "Task completed successfully"}
-    }
+    from ..nodes.message import AnswerResponse, AnswerResult
+    
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Create answer result
+    answer_result = AnswerResult(
+        status="success",
+        summary="Task completed successfully",
+        steps_taken=len(state_dict.get("progress", [])),
+        artifacts_created=len(state_dict.get("artifacts", [])),
+        final_result={"answer": "Task completed successfully"}
+    )
+    
+    # Create answer response
+    answer_response = AnswerResponse(
+        current_step="complete",
+        result=answer_result
+    )
+    
+    # Create the proper return type and convert to state update
+    return_obj = AnswerReturn(
+        current_step="complete",
+        progress=[],
+        artifacts=[],
+        failures=[],
+        result=answer_result.model_dump(),
+        answer_response=answer_response
+    )
+    
+    return return_obj.to_state_update()
 
 
 def create_agent_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:

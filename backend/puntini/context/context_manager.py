@@ -6,7 +6,7 @@ for managing context preparation and progressive disclosure.
 
 from typing import Any, Dict, List
 from ..interfaces.context_manager import ContextManager, ModelInput
-from ..orchestration.state import State
+from ..orchestration.state_schema import State
 
 
 class SimpleContextManager:

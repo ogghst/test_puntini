@@ -4,12 +4,13 @@ This module implements the call_tool node that executes tools
 with validated inputs and normalizes human-readable errors.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 import time
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 
-from ..orchestration.state import State
+if TYPE_CHECKING:
+    from ..orchestration.state_schema import State
 from ..interfaces.tool_registry import ToolRegistry
 from ..models.errors import ValidationError, NotFoundError, ToolError
 from ..logging import get_logger
@@ -19,7 +20,7 @@ logger = get_logger(__name__)
 
 
 def call_tool(
-    state: State, 
+    state: "State", 
     config: Optional[RunnableConfig] = None, 
     runtime: Optional[Runtime] = None
 ) -> CallToolResponse:
@@ -51,7 +52,7 @@ def call_tool(
         ValidationError: If tool arguments are invalid.
         NotFoundError: If tool is not available.
     """
-    tool_signature = state.get("_tool_signature", {})
+    tool_signature = state.tool_signature or {}
     tool_name = tool_signature.get("tool_name")
     tool_args = tool_signature.get("tool_args", {})
     routing_decision = tool_signature.get("routing_decision", {})
@@ -79,7 +80,7 @@ def call_tool(
         )
     
     # Get tool registry from state
-    tool_registry = state.get("tool_registry")
+    tool_registry = state.tool_registry
     if tool_registry is None:
         error_msg = "Tool registry not available in state. Ensure agent is created with create_initial_state()"
         logger.error(error_msg)

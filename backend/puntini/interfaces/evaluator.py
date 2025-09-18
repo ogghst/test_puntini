@@ -4,8 +4,10 @@ This module defines the Evaluator protocol that handles the evaluation
 of step results and routing decisions for the agent's state machine.
 """
 
-from typing import Any, Protocol
-from ..orchestration.state import State
+from typing import Any, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..orchestration.state_schema import State
 
 
 class Evaluator(Protocol):
@@ -15,7 +17,7 @@ class Evaluator(Protocol):
     retry, or diagnose based on the current state and step results.
     """
     
-    def evaluate_step(self, state: State, result: dict[str, Any]) -> str:
+    def evaluate_step(self, state: "State", result: dict[str, Any]) -> str:
         """Evaluate a step result and determine the next action.
 
         Args:
@@ -31,7 +33,7 @@ class Evaluator(Protocol):
         """
         ...
     
-    def should_retry(self, state: State, error: dict[str, Any]) -> bool:
+    def should_retry(self, state: "State", error: dict[str, Any]) -> bool:
         """Determine if a step should be retried.
 
         Args:
@@ -47,7 +49,7 @@ class Evaluator(Protocol):
         """
         ...
     
-    def should_escalate(self, state: State) -> bool:
+    def should_escalate(self, state: "State") -> bool:
         """Determine if the agent should escalate to human input.
 
         Args:

@@ -4,8 +4,10 @@ This module defines the EscalationHandler protocol that handles escalation
 to human input and manages the human-in-the-loop workflow.
 """
 
-from typing import Any, Protocol
-from ..orchestration.state import State
+from typing import Any, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..orchestration.state_schema import State
 
 
 class EscalationHandler(Protocol):
@@ -15,7 +17,7 @@ class EscalationHandler(Protocol):
     including interrupt handling and resume capabilities.
     """
     
-    def should_escalate(self, state: State) -> bool:
+    def should_escalate(self, state: "State") -> bool:
         """Determine if escalation to human input is needed.
 
         Args:
@@ -31,7 +33,7 @@ class EscalationHandler(Protocol):
         """
         ...
     
-    def prepare_escalation_context(self, state: State) -> dict[str, Any]:
+    def prepare_escalation_context(self, state: "State") -> dict[str, Any]:
         """Prepare context for human escalation.
 
         Args:
@@ -65,7 +67,7 @@ class EscalationHandler(Protocol):
         """
         ...
     
-    def resume_after_escalation(self, state: State) -> State:
+    def resume_after_escalation(self, state: "State") -> "State":
         """Resume agent execution after human escalation.
 
         Args:

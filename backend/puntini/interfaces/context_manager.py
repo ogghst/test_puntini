@@ -4,8 +4,10 @@ This module defines the ContextManager protocol that manages context preparation
 and progressive disclosure strategies for the agent's state management.
 """
 
-from typing import Any, Protocol
-from ..orchestration.state import State
+from typing import Any, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..orchestration.state_schema import State
 
 
 class ModelInput(Protocol):
@@ -25,7 +27,7 @@ class ContextManager(Protocol):
     the current attempt and failure patterns.
     """
     
-    def prepare_minimal_context(self, state: State) -> ModelInput:
+    def prepare_minimal_context(self, state: "State") -> ModelInput:
         """Prepare minimal context for the first attempt.
 
         Args:
@@ -40,7 +42,7 @@ class ContextManager(Protocol):
         """
         ...
     
-    def add_error_context(self, state: State, error: dict) -> ModelInput:
+    def add_error_context(self, state: "State", error: dict) -> ModelInput:
         """Add error context for the second attempt.
 
         Args:
@@ -56,7 +58,7 @@ class ContextManager(Protocol):
         """
         ...
     
-    def add_historical_context(self, state: State) -> ModelInput:
+    def add_historical_context(self, state: "State") -> ModelInput:
         """Add historical context for the third attempt.
 
         Args:
@@ -71,7 +73,7 @@ class ContextManager(Protocol):
         """
         ...
     
-    def record_failure(self, state: State, error: dict) -> State:
+    def record_failure(self, state: "State", error: dict) -> "State":
         """Record a failure in the agent state.
 
         Args:
@@ -87,7 +89,7 @@ class ContextManager(Protocol):
         """
         ...
     
-    def advance_step(self, state: State, result: dict) -> State:
+    def advance_step(self, state: "State", result: dict) -> "State":
         """Advance to the next step in the agent's execution.
 
         Args:
@@ -103,7 +105,7 @@ class ContextManager(Protocol):
         """
         ...
     
-    def is_complete(self, state: State) -> bool:
+    def is_complete(self, state: "State") -> bool:
         """Check if the agent's goal has been completed.
 
         Args:

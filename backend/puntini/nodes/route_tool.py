@@ -4,11 +4,12 @@ This module implements the route_tool node that selects the
 appropriate tool or branch to ask/diagnose paths.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 
-from ..orchestration.state import State
+if TYPE_CHECKING:
+    from ..orchestration.state_schema import State
 from ..interfaces.tool_registry import ToolRegistry
 from ..models.errors import ValidationError, NotFoundError
 from ..logging import get_logger
@@ -18,7 +19,7 @@ logger = get_logger(__name__)
 
 
 def route_tool(
-    state: State, 
+    state: "State", 
     config: Optional[RunnableConfig] = None, 
     runtime: Optional[Runtime] = None
 ) -> RouteToolResponse:
@@ -48,7 +49,7 @@ def route_tool(
         ValidationError: If tool signature is invalid.
         NotFoundError: If specified tool is not available.
     """
-    tool_signature = state.get("_tool_signature", {})
+    tool_signature = state.tool_signature or {}
     tool_name = tool_signature.get("tool_name")
     tool_args = tool_signature.get("tool_args", {})
     reasoning = tool_signature.get("reasoning", "No reasoning provided")
@@ -70,7 +71,7 @@ def route_tool(
         )
     
     # Get tool registry from state
-    tool_registry = state.get("tool_registry")
+    tool_registry = state.tool_registry
     if tool_registry is None:
         error_msg = "Tool registry not available in state. Ensure agent is created with create_initial_state()"
         logger.error(error_msg)
