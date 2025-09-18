@@ -66,12 +66,14 @@ class PlanStepReturn(NodeReturnBase):
     """Return type for plan_step node function."""
     
     plan_step_response: Optional[Any] = Field(default=None, description="Plan step response object")
+    tool_signature: Optional[Dict[str, Any]] = Field(default=None, description="Tool signature for execution")
     
     def to_state_update(self) -> Dict[str, Any]:
         """Convert to state update including plan_step specific fields."""
         base_update = super().to_state_update()
         base_update.update({
-            "plan_step_response": self.plan_step_response
+            "plan_step_response": self.plan_step_response,
+            "tool_signature": self.tool_signature
         })
         return base_update
 
@@ -80,12 +82,14 @@ class RouteToolReturn(NodeReturnBase):
     """Return type for route_tool node function."""
     
     route_tool_response: Optional[Any] = Field(default=None, description="Route tool response object")
+    tool_signature: Optional[Dict[str, Any]] = Field(default=None, description="Validated tool signature")
     
     def to_state_update(self) -> Dict[str, Any]:
         """Convert to state update including route_tool specific fields."""
         base_update = super().to_state_update()
         base_update.update({
-            "route_tool_response": self.route_tool_response
+            "route_tool_response": self.route_tool_response,
+            "tool_signature": self.tool_signature
         })
         return base_update
 

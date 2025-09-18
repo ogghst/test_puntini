@@ -99,7 +99,18 @@ def create_agent_with_components(
     """
     # Create the agent graph
     from ..orchestration.graph import create_agent_graph
-    return create_agent_graph()
+    graph = create_agent_graph()
+    
+    # Store components in the graph for runtime access
+    # This allows tools to access components through get_runtime()
+    graph._components = {
+        'graph_store': graph_store,
+        'context_manager': context_manager,
+        'tool_registry': tool_registry,
+        'tracer': tracer
+    }
+    
+    return graph
 
 
 def create_initial_state(
@@ -138,8 +149,5 @@ def create_initial_state(
         tool_registry=tool_registry,
         graph_store=graph_store,
         context_manager=context_manager,
-        tracer=tracer,
-        _tool_signature={},
-        _error_context={},
-        _escalation_context={}
+        tracer=tracer
     )

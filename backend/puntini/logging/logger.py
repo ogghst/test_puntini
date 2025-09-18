@@ -67,6 +67,9 @@ class LoggingService:
         if self.settings.logging.console_logging:
             self._setup_console_handler()
             
+        # Configure specific logger levels to filter unwanted messages
+        self._configure_logger_levels()
+            
         self._configured = True
         
     def _setup_formatters(self) -> None:
@@ -131,6 +134,42 @@ class LoggingService:
         root_logger.addHandler(console_handler)
         
         self._handlers.append(console_handler)
+        
+    def _configure_logger_levels(self) -> None:
+        """Configure specific logger levels to filter unwanted messages.
+        
+        This method sets up filtering for third-party libraries that produce
+        excessive debug output, such as httpcore, httpx, and urllib3.
+        """
+        # Set httpcore to WARNING level to exclude debug messages
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
+        
+        # Set httpx to WARNING level to exclude debug messages
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        
+        # Set urllib3 to WARNING level to exclude debug messages
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        
+        # Set requests to WARNING level to exclude debug messages
+        logging.getLogger("requests").setLevel(logging.WARNING)
+        
+        # Set aiohttp to WARNING level to exclude debug messages
+        logging.getLogger("aiohttp").setLevel(logging.WARNING)
+        
+        # Set asyncio to WARNING level to exclude debug messages
+        logging.getLogger("asyncio").setLevel(logging.WARNING)
+        
+    def set_logger_level(self, logger_name: str, level: Union[str, int]) -> None:
+        """Set the logging level for a specific logger.
+        
+        Args:
+            logger_name: Name of the logger to configure.
+            level: Logging level (string like 'DEBUG', 'INFO', 'WARNING', 'ERROR' 
+                   or integer like logging.DEBUG, logging.INFO, etc.).
+        """
+        if isinstance(level, str):
+            level = getattr(logging, level.upper())
+        logging.getLogger(logger_name).setLevel(level)
         
     def get_logger(self, name: str) -> logging.Logger:
         """Get a logger instance for a specific module.
@@ -273,3 +312,15 @@ def setup_logging(settings: Optional[Settings] = None) -> LoggingService:
     _logging_service = LoggingService(settings)
     _logging_service.setup()
     return _logging_service
+
+
+def set_logger_level(logger_name: str, level: Union[str, int]) -> None:
+    """Set the logging level for a specific logger.
+    
+    Args:
+        logger_name: Name of the logger to configure.
+        level: Logging level (string like 'DEBUG', 'INFO', 'WARNING', 'ERROR' 
+               or integer like logging.DEBUG, logging.INFO, etc.).
+    """
+    service = get_logging_service()
+    service.set_logger_level(logger_name, level)

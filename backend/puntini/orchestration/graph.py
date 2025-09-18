@@ -228,7 +228,8 @@ def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Op
         artifacts=state_dict.get("artifacts", []) + response.artifacts,
         failures=state_dict.get("failures", []) + response.failures,
         result=response.result.model_dump() if response.result else None,
-        plan_step_response=response
+        plan_step_response=response,
+        tool_signature=response.tool_signature
     )
     
     return return_obj.to_state_update()
@@ -267,7 +268,8 @@ def route_tool(state: State, config: Optional[RunnableConfig] = None, runtime: O
         artifacts=state_dict.get("artifacts", []) + response.artifacts,
         failures=state_dict.get("failures", []) + response.failures,
         result=response.result.model_dump() if response.result else None,
-        route_tool_response=response
+        route_tool_response=response,
+        tool_signature=response.tool_signature
     )
     
     return return_obj.to_state_update()

@@ -57,26 +57,36 @@ def run(goal: str, config: str | None, verbose: bool, tracer: str):
         click.echo(f"❌ Unsupported tracer type: {tracer}")
         return
     
-    # Create simple agent for now
-    agent = create_simple_agent()
+    # Create agent with proper components
+    from puntini.graph.graph_store_factory import create_memory_graph_store
+    from puntini.context.context_manager_factory import create_simple_context_manager
+    from puntini.tools.tool_setup import create_tool_registry_with_validation
+    from puntini.observability.tracer_factory import create_console_tracer
+    from puntini import create_agent_with_components, create_initial_state
     
-    # Prepare initial state
-    initial_state = {
-        "goal": goal,
-        "plan": [],
-        "progress": [],
-        "failures": [],
-        "retry_count": 0,
-        "max_retries": settings.max_retries,
-        "messages": [],
-        "current_step": "parse_goal",
-        "current_attempt": 1,
-        "artifacts": [],
-        "result": {},
-        "_tool_signature": {},
-        "_error_context": {},
-        "_escalation_context": {}
-    }
+    # Create all required components
+    graph_store = create_memory_graph_store()
+    context_manager = create_simple_context_manager()
+    tool_registry = create_tool_registry_with_validation()
+    tracer = create_console_tracer()
+    
+    # Create agent with components
+    agent = create_agent_with_components(
+        graph_store=graph_store,
+        context_manager=context_manager,
+        tool_registry=tool_registry,
+        tracer=tracer
+    )
+    
+    # Create proper initial state with all components
+    initial_state = create_initial_state(
+        goal=goal,
+        graph_store=graph_store,
+        context_manager=context_manager,
+        tool_registry=tool_registry,
+        tracer=tracer,
+        max_retries=settings.max_retries
+    )
     
     # Run the agent
     try:
@@ -107,8 +117,14 @@ def run(goal: str, config: str | None, verbose: bool, tracer: str):
         llm_factory = LLMFactory()
         llm = llm_factory.get_default_llm()
         
-        # Pass LLM through context
-        context = {"llm": llm}
+        # Pass LLM and components through context
+        context = {
+            "llm": llm,
+            "graph_store": graph_store,
+            "context_manager": context_manager,
+            "tool_registry": tool_registry,
+            "tracer": tracer
+        }
         config = {"configurable": {"thread_id": thread_id}, "callbacks": [langfuse_handler]}
         
         result = agent.invoke(initial_state, config=config, context=context)

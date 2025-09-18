@@ -112,8 +112,12 @@ def call_tool(
         
         logger.info(f"Executing tool '{tool_name}' with {len(tool_args)} arguments")
         
-        # Execute the tool
-        raw_result = tool_callable(**tool_args)
+        # Execute the tool using LangChain's invoke method
+        try:
+            raw_result = tool_callable.invoke(tool_args)
+        except AttributeError:
+            # Fallback for tools that don't have invoke method
+            raw_result = tool_callable(**tool_args)
         
         execution_time = time.time() - start_time
         

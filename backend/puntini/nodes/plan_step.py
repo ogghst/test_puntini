@@ -40,6 +40,45 @@ class StepPlan(BaseModel):
     overall_progress: float = Field(ge=0.0, le=1.0, description="Overall progress towards goal completion")
 
 
+def _get_tool_specifications_from_registry(tool_registry) -> str:
+    """Generate tool specifications dynamically from the tool registry.
+    
+    Args:
+        tool_registry: Tool registry instance containing available tools.
+        
+    Returns:
+        Formatted string with tool specifications for the LLM prompt.
+    """
+    if not tool_registry:
+        return "No tools available in registry."
+    
+    tool_specs = []
+    tools = tool_registry.list()
+    
+    for i, tool in enumerate(tools, 1):
+        tool_specs.append(f"{i}. {tool.name}: {tool.description}")
+        
+        # Get input schema if available
+        if tool.input_schema and 'properties' in tool.input_schema:
+            required_fields = tool.input_schema.get('required', [])
+            properties = tool.input_schema['properties']
+            
+            tool_specs.append("   Required arguments:")
+            for field_name, field_info in properties.items():
+                is_required = field_name in required_fields
+                field_desc = field_info.get('description', 'No description')
+                field_type = field_info.get('type', 'unknown')
+                required_marker = " (REQUIRED)" if is_required else " (optional)"
+                
+                tool_specs.append(f"   - {field_name}: {field_desc} (type: {field_type}){required_marker}")
+        else:
+            tool_specs.append("   No detailed argument information available")
+        
+        tool_specs.append("")  # Empty line between tools
+    
+    return "\n".join(tool_specs)
+
+
 def plan_step(state: "State", config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> PlanStepResponse:
     """Plan the next step in the agent's execution using LLM.
     
@@ -113,27 +152,27 @@ def plan_step(state: "State", config: Optional[RunnableConfig] = None, runtime: 
             }
         )
                    
+        # Get tool specifications dynamically from registry
+        tool_registry = state.tool_registry
+        tool_specifications = _get_tool_specifications_from_registry(tool_registry)
+        
         # Create planning prompt
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert at planning graph manipulation steps for an AI agent.
+            ("system", f"""You are an expert at planning graph manipulation steps for an AI agent.
 
 Your task is to plan the next micro-step to achieve the user's goal. You have access to these tools:
-- add_node: Create a new node with label, key, and properties
-- add_edge: Create a relationship between two nodes
-- update_props: Update properties of existing nodes or edges
-- delete_node: Remove a node and its relationships
-- delete_edge: Remove a relationship
-- query_graph: Search and retrieve graph data
-- cypher_query: Execute custom Cypher queries
+
+{tool_specifications}
 
 Based on the parsed goal information, plan the next step:
 1. Choose the most appropriate tool
-2. Provide valid arguments for the tool
+2. Provide ALL required arguments for the tool (ensure all REQUIRED fields are included)
 3. Explain your reasoning
 4. Assess your confidence in this plan
 5. Indicate if this is the final step
 
 Guidelines:
+- ALWAYS include ALL REQUIRED arguments for the selected tool
 - Be specific with tool arguments (exact labels, keys, property names)
 - Consider the current progress and what's needed next
 - Ensure tool arguments are valid and complete

@@ -19,6 +19,24 @@ from .cypher_qa import (
     CypherQuery,
     CypherResult,
 )
+from .graph_tools import (
+    add_node,
+    add_edge,
+    update_props,
+    delete_node,
+    delete_edge,
+    query_graph,
+    cypher_query,
+    GRAPH_TOOLS,
+)
+from .tool_setup import (
+    create_tool_spec_from_langchain_tool,
+    register_graph_tools,
+    create_configured_tool_registry,
+    get_available_tools,
+    validate_tool_registry,
+    create_tool_registry_with_validation,
+)
 
 __all__ = [
     # Tool registry implementations
@@ -34,4 +52,20 @@ __all__ = [
     "cypher_qa",
     "CypherQuery",
     "CypherResult",
+    "add_node",
+    "add_edge",
+    "update_props",
+    "delete_node",
+    "delete_edge",
+    "query_graph",
+    "cypher_query",
+    "GRAPH_TOOLS",
+    
+    # Tool setup utilities
+    "create_tool_spec_from_langchain_tool",
+    "register_graph_tools",
+    "create_configured_tool_registry",
+    "get_available_tools",
+    "validate_tool_registry",
+    "create_tool_registry_with_validation",
 ]

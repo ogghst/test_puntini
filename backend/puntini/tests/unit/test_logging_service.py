@@ -12,8 +12,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, Any
 
-from logging import LoggingService, get_logger, setup_logging, get_logging_service
-from utils.settings import Settings
+from puntini.logging.logger import LoggingService, get_logger, setup_logging, get_logging_service, set_logger_level
+from puntini.utils.settings import Settings
 
 
 class TestLoggingServiceInitialization:
@@ -526,6 +526,172 @@ class TestLoggingServiceIntegration:
             logs_path = Path(temp_dir)
             log_files = list(logs_path.glob("*.log"))
             assert len(log_files) > 0
+
+
+class TestLoggingServiceLoggerLevelConfiguration:
+    """Test LoggingService logger level configuration functionality."""
+    
+    def test_configure_logger_levels_sets_httpcore_to_warning(self):
+        """Test that httpcore logger is set to WARNING level."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings()
+            settings.logging.logs_path = temp_dir
+            settings.logging.console_logging = False
+            
+            logging_service = LoggingService(settings)
+            logging_service.setup()
+            
+            # Check that httpcore logger is set to WARNING
+            httpcore_logger = logging.getLogger("httpcore")
+            assert httpcore_logger.level == logging.WARNING
+    
+    def test_configure_logger_levels_sets_httpx_to_warning(self):
+        """Test that httpx logger is set to WARNING level."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings()
+            settings.logging.logs_path = temp_dir
+            settings.logging.console_logging = False
+            
+            logging_service = LoggingService(settings)
+            logging_service.setup()
+            
+            # Check that httpx logger is set to WARNING
+            httpx_logger = logging.getLogger("httpx")
+            assert httpx_logger.level == logging.WARNING
+    
+    def test_configure_logger_levels_sets_urllib3_to_warning(self):
+        """Test that urllib3 logger is set to WARNING level."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings()
+            settings.logging.logs_path = temp_dir
+            settings.logging.console_logging = False
+            
+            logging_service = LoggingService(settings)
+            logging_service.setup()
+            
+            # Check that urllib3 logger is set to WARNING
+            urllib3_logger = logging.getLogger("urllib3")
+            assert urllib3_logger.level == logging.WARNING
+    
+    def test_configure_logger_levels_sets_requests_to_warning(self):
+        """Test that requests logger is set to WARNING level."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings()
+            settings.logging.logs_path = temp_dir
+            settings.logging.console_logging = False
+            
+            logging_service = LoggingService(settings)
+            logging_service.setup()
+            
+            # Check that requests logger is set to WARNING
+            requests_logger = logging.getLogger("requests")
+            assert requests_logger.level == logging.WARNING
+    
+    def test_configure_logger_levels_sets_aiohttp_to_warning(self):
+        """Test that aiohttp logger is set to WARNING level."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings()
+            settings.logging.logs_path = temp_dir
+            settings.logging.console_logging = False
+            
+            logging_service = LoggingService(settings)
+            logging_service.setup()
+            
+            # Check that aiohttp logger is set to WARNING
+            aiohttp_logger = logging.getLogger("aiohttp")
+            assert aiohttp_logger.level == logging.WARNING
+    
+    def test_configure_logger_levels_sets_asyncio_to_warning(self):
+        """Test that asyncio logger is set to WARNING level."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings()
+            settings.logging.logs_path = temp_dir
+            settings.logging.console_logging = False
+            
+            logging_service = LoggingService(settings)
+            logging_service.setup()
+            
+            # Check that asyncio logger is set to WARNING
+            asyncio_logger = logging.getLogger("asyncio")
+            assert asyncio_logger.level == logging.WARNING
+    
+    def test_set_logger_level_with_string_level(self):
+        """Test setting logger level with string level."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings()
+            settings.logging.logs_path = temp_dir
+            settings.logging.console_logging = False
+            
+            logging_service = LoggingService(settings)
+            logging_service.setup()
+            
+            # Set a custom logger to DEBUG level using string
+            logging_service.set_logger_level("test_logger", "DEBUG")
+            test_logger = logging.getLogger("test_logger")
+            assert test_logger.level == logging.DEBUG
+    
+    def test_set_logger_level_with_integer_level(self):
+        """Test setting logger level with integer level."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings()
+            settings.logging.logs_path = temp_dir
+            settings.logging.console_logging = False
+            
+            logging_service = LoggingService(settings)
+            logging_service.setup()
+            
+            # Set a custom logger to ERROR level using integer
+            logging_service.set_logger_level("test_logger", logging.ERROR)
+            test_logger = logging.getLogger("test_logger")
+            assert test_logger.level == logging.ERROR
+    
+    def test_global_set_logger_level_function(self):
+        """Test the global set_logger_level function."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings()
+            settings.logging.logs_path = temp_dir
+            settings.logging.console_logging = False
+            
+            setup_logging(settings)
+            
+            # Use the global function to set logger level
+            set_logger_level("global_test_logger", "INFO")
+            test_logger = logging.getLogger("global_test_logger")
+            assert test_logger.level == logging.INFO
+    
+    def test_httpcore_debug_messages_filtered(self):
+        """Test that httpcore debug messages are actually filtered out."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings()
+            settings.logging.logs_path = temp_dir
+            settings.logging.console_logging = False
+            settings.logging.log_level = "DEBUG"  # Set root logger to DEBUG
+            
+            logging_service = LoggingService(settings)
+            logging_service.setup()
+            
+            # Create a test logger to capture output
+            test_logger = logging.getLogger("test_capture")
+            log_stream = io.StringIO()
+            stream_handler = logging.StreamHandler(log_stream)
+            stream_handler.setLevel(logging.DEBUG)
+            test_logger.addHandler(stream_handler)
+            test_logger.setLevel(logging.DEBUG)
+            
+            # Simulate httpcore debug message
+            httpcore_logger = logging.getLogger("httpcore")
+            httpcore_logger.debug("This is a debug message from httpcore")
+            httpcore_logger.info("This is an info message from httpcore")
+            httpcore_logger.warning("This is a warning message from httpcore")
+            
+            # Clean up
+            test_logger.removeHandler(stream_handler)
+            
+            # Check that debug message was filtered but warning was not
+            log_output = log_stream.getvalue()
+            assert "This is a debug message from httpcore" not in log_output
+            assert "This is an info message from httpcore" not in log_output
+            assert "This is a warning message from httpcore" not in log_output  # This should be filtered too since we set it to WARNING
 
 
 class TestLoggingServiceErrorHandling:

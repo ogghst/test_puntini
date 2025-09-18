@@ -44,6 +44,11 @@ from .tools.tool_registry_factory import (
     create_standard_tool_registry,
     ToolRegistryConfig,
 )
+from .tools.tool_setup import (
+    create_tool_registry_with_validation,
+    create_configured_tool_registry,
+    validate_tool_registry,
+)
 
 # Observability and tracing
 from .observability.tracer_factory import (
@@ -155,6 +160,9 @@ __all__ = [
     # Tool registry
     "create_standard_tool_registry",
     "ToolRegistryConfig",
+    "create_tool_registry_with_validation",
+    "create_configured_tool_registry",
+    "validate_tool_registry",
     
     # Observability
     "create_langfuse_tracer",
