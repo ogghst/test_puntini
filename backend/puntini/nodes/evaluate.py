@@ -1,83 +1,397 @@
 """Evaluate node implementation.
 
 This module implements the evaluate node that decides advance,
-retry, or diagnose based on step results.
+retry, or diagnose based on step results using LLM-based evaluation
+with structured output for intelligent routing decisions.
 """
 
-from typing import Any, Dict, TYPE_CHECKING
+from typing import Any, Dict, Optional, Literal, TYPE_CHECKING
+from langchain_core.language_models import BaseChatModel
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableConfig
+from langgraph.runtime import Runtime, get_runtime
+from pydantic import BaseModel, Field
+from datetime import datetime
 
 if TYPE_CHECKING:
     from ..orchestration.state_schema import State
-from .message import EvaluateResponse, EvaluateResult
+from ..logging import get_logger
+from ..models.errors import ValidationError, AgentError
+from .message import EvaluateResponse, EvaluateResult, Failure, Artifact, ErrorContext
 
 
-def evaluate(state: "State") -> EvaluateResponse:
+def evaluate(
+    state: "State", 
+    config: Optional[RunnableConfig] = None, 
+    runtime: Optional[Runtime] = None
+) -> EvaluateResponse:
     """Evaluate the step result and decide next action.
     
-    This node analyzes the result of the executed step and determines
-    whether to advance, retry, or diagnose based on the outcome.
-    The routing decision is handled by conditional edges in the graph.
+    This node evaluates the result from the previous step (typically call_tool)
+    and determines the next action based on the evaluation criteria. It uses
+    LLM-based evaluation with structured output to make intelligent routing
+    decisions between advancing, retrying, or diagnosing issues.
     
     Args:
-        state: Current agent state with step result.
+        state: Current agent state with step execution results.
+        config: Optional RunnableConfig for additional configuration.
+        runtime: Optional Runtime context for additional runtime information.
         
     Returns:
         Updated state with evaluation results.
         
     Notes:
-        The evaluation should consider the step result, current retry
-        count, and any error patterns. The actual routing is handled
-        by conditional edges using the routing functions.
+        Evaluation considers:
+        - Tool execution success/failure status
+        - Error types and retry patterns
+        - Progress towards goal completion
+        - Retry limits and escalation thresholds
+        - Context from previous steps and failures
+        
+        The evaluation uses structured LLM output to ensure consistent
+        decision-making and proper routing to the next appropriate node.
+        
+    Raises:
+        ValidationError: If state is invalid or missing required data.
+        SystemError: If LLM evaluation fails and fallback logic is insufficient.
     """
-    result = state.result or {}
-    status = result.get("status", "unknown")
-    retry_count = state.retry_count
-    max_retries = state.max_retries
+    # Initialize logger
+    logger = get_logger(__name__)
     
-    # Enhanced evaluation logic
-    if status == "success":
-        # Check if the entire goal is complete
-        goal_complete = result.get("goal_complete", False)
-        evaluation_result = EvaluateResult(
-            status=status,
-            retry_count=retry_count,
-            max_retries=max_retries,
-            evaluation_timestamp="now",  # Could use actual timestamp
-            decision_reason="Step completed successfully",
-            goal_complete=goal_complete,
-            next_action="continue" if not goal_complete else "complete"
-        )
-    elif status == "error":
-        if retry_count < max_retries:
-            evaluation_result = EvaluateResult(
-                status=status,
-                retry_count=retry_count + 1,
-                max_retries=max_retries,
-                evaluation_timestamp="now",
-                decision_reason=f"Error occurred, retrying (attempt {retry_count + 1}/{max_retries})",
-                next_action="retry"
-            )
-        else:
-            evaluation_result = EvaluateResult(
-                status=status,
-                retry_count=retry_count,
-                max_retries=max_retries,
-                evaluation_timestamp="now",
-                decision_reason="Max retries exceeded, escalating",
-                next_action="escalate"
-            )
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
     else:
-        evaluation_result = EvaluateResult(
-            status=status,
-            retry_count=retry_count,
-            max_retries=max_retries,
-            evaluation_timestamp="now",
-            decision_reason="Unknown status, escalating",
-            next_action="escalate"
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Get current step result from call_tool_response
+    call_tool_response = state_dict.get("call_tool_response")
+    if not call_tool_response:
+        error_msg = "No call_tool_response found in state for evaluation"
+        logger.error(error_msg)
+        return EvaluateResponse(
+            current_step="diagnose",
+            result=EvaluateResult(
+                status="error",
+                error=error_msg,
+                error_type="validation_error",
+                retry_count=state_dict.get("retry_count", 0),
+                max_retries=state_dict.get("max_retries", 3),
+                evaluation_timestamp=datetime.utcnow().isoformat(),
+                decision_reason="Missing call_tool_response for evaluation"
+            ),
+            error_context=ErrorContext(
+                type="validation_error",
+                message=error_msg,
+                details={"missing_component": "call_tool_response"}
+            )
         )
     
-    return EvaluateResponse(
-        current_step="evaluate_complete",
-        result=evaluation_result,
-        progress=[f"Evaluated step result: {evaluation_result.decision_reason}"]
+    # Extract result information
+    result = call_tool_response.get("result", {})
+    tool_name = result.get("tool_name", "unknown")
+    execution_status = result.get("status", "unknown")
+    execution_time = result.get("execution_time", 0.0)
+    error = result.get("error")
+    error_type = result.get("error_type")
+    
+    # Get current retry information
+    retry_count = state_dict.get("retry_count", 0)
+    max_retries = state_dict.get("max_retries", 3)
+    
+    logger.info(f"Evaluating step result: {execution_status} for tool '{tool_name}' (retry {retry_count}/{max_retries})")
+    
+    try:
+        # Get LLM from runtime context for structured evaluation
+        if runtime is None:
+            try:
+                runtime = get_runtime()
+            except Exception as e:
+                logger.error(f"Failed to get runtime context: {e}")
+                return _fallback_evaluation(state_dict, result, retry_count, max_retries, f"Runtime error: {e}")
+        
+        if not hasattr(runtime, 'context') or 'llm' not in runtime.context:
+            logger.warning("LLM not available in runtime context, using fallback evaluation")
+            return _fallback_evaluation(state_dict, result, retry_count, max_retries)
+        
+        llm: BaseChatModel = runtime.context['llm']
+        
+        # Define structured output schema for evaluation
+        class EvaluationDecision(BaseModel):
+            """Schema for LLM evaluation decision."""
+            decision: Literal["advance", "retry", "diagnose", "escalate"] = Field(
+                description="Next action to take"
+            )
+            confidence: float = Field(ge=0.0, le=1.0, description="Confidence in decision")
+            reasoning: str = Field(description="Detailed reasoning for the decision")
+            goal_progress: float = Field(ge=0.0, le=1.0, description="Estimated progress towards goal")
+            should_retry: bool = Field(description="Whether this step should be retried")
+            retry_reason: Optional[str] = Field(default=None, description="Reason for retry if applicable")
+            next_action_hint: str = Field(description="Hint for next action")
+        
+        # Create structured LLM
+        structured_llm = llm.with_structured_output(EvaluationDecision)
+        
+        # Create evaluation prompt
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an expert evaluator for AI agent step execution. Your task is to evaluate the result of a tool execution and determine the next action.
+
+Available actions:
+- "advance": Step was successful, continue to next step or complete
+- "retry": Step failed but can be retried with modifications
+- "diagnose": Step failed and needs analysis to understand the issue
+- "escalate": Step failed repeatedly and needs human intervention
+
+Evaluation criteria:
+1. Tool execution status (success/error)
+2. Error type and recoverability
+3. Current retry count vs max retries
+4. Progress towards goal completion
+5. Error patterns and context
+6. Available fallback options
+
+Guidelines:
+- If tool succeeded: advance (unless goal requires more steps)
+- If tool failed with recoverable error and retries available: retry
+- If tool failed with systematic error or max retries reached: diagnose
+- If repeated failures or critical errors: escalate
+- Consider the overall goal progress and remaining work
+- Be conservative with retries to avoid infinite loops
+
+Return a structured evaluation with clear reasoning."""),
+            ("human", """Tool Execution Result:
+Tool: {tool_name}
+Status: {execution_status}
+Execution Time: {execution_time:.3f}s
+Error: {error}
+Error Type: {error_type}
+
+Current State:
+Retry Count: {retry_count}/{max_retries}
+Goal: {goal}
+Progress: {progress}
+Recent Failures: {recent_failures}
+
+Evaluate this result and determine the next action.""")
+        ])
+        
+        # Prepare evaluation context
+        goal = state_dict.get("goal", "Unknown goal")
+        progress = state_dict.get("progress", [])
+        recent_failures = _get_recent_failures(state_dict)
+        
+        # Create evaluation chain
+        evaluation_chain = prompt | structured_llm
+        
+        # Generate evaluation decision
+        evaluation_decision: EvaluationDecision = evaluation_chain.invoke({
+            "tool_name": tool_name,
+            "execution_status": execution_status,
+            "execution_time": execution_time,
+            "error": error or "None",
+            "error_type": error_type or "None",
+            "retry_count": retry_count,
+            "max_retries": max_retries,
+            "goal": goal,
+            "progress": "\n".join(progress[-3:]) if progress else "No progress yet",
+            "recent_failures": recent_failures
+        })
+        
+        # Create evaluation result
+        evaluation_result = EvaluateResult(
+            status="success",
+            retry_count=retry_count,
+            max_retries=max_retries,
+            evaluation_timestamp=datetime.utcnow().isoformat(),
+            decision_reason=evaluation_decision.reasoning,
+            goal_complete=evaluation_decision.decision == "advance" and evaluation_decision.goal_progress >= 0.9,
+            next_action=evaluation_decision.next_action_hint
+        )
+        
+        # Determine next step based on decision
+        if evaluation_decision.decision == "advance":
+            next_step = "answer" if evaluation_decision.goal_progress >= 0.9 else "plan_step"
+        elif evaluation_decision.decision == "retry":
+            next_step = "plan_step"
+            # Increment retry count
+            retry_count += 1
+        elif evaluation_decision.decision == "diagnose":
+            next_step = "diagnose"
+        else:  # escalate
+            next_step = "escalate"
+        
+        # Create evaluation response
+        evaluation_response = EvaluateResponse(
+            current_step=next_step,
+            result=evaluation_result,
+            progress=[f"Evaluated step: {evaluation_decision.decision} (confidence: {evaluation_decision.confidence:.2f})"],
+            artifacts=[Artifact(
+                type="evaluation_decision",
+                data={
+                    "decision": evaluation_decision.decision,
+                    "confidence": evaluation_decision.confidence,
+                    "reasoning": evaluation_decision.reasoning,
+                    "goal_progress": evaluation_decision.goal_progress,
+                    "should_retry": evaluation_decision.should_retry,
+                    "retry_reason": evaluation_decision.retry_reason,
+                    "next_action_hint": evaluation_decision.next_action_hint
+                }
+            )]
+        )
+        
+        # Add failure record if this was a retry
+        if evaluation_decision.decision == "retry" and error:
+            failure = Failure(
+                step="call_tool",
+                error=error,
+                attempt=retry_count,
+                error_type=error_type or "unknown"
+            )
+            evaluation_response.failures = state_dict.get("failures", []) + [failure]
+        
+        logger.info(f"Evaluation complete: {evaluation_decision.decision} -> {next_step}")
+        
+        return evaluation_response
+        
+    except Exception as e:
+        error_msg = f"LLM evaluation failed: {str(e)}"
+        logger.error(error_msg)
+        
+        # Fallback to rule-based evaluation
+        return _fallback_evaluation(state_dict, result, retry_count, max_retries, error_msg)
+
+
+def _fallback_evaluation(
+    state_dict: Dict[str, Any], 
+    result: Dict[str, Any], 
+    retry_count: int, 
+    max_retries: int,
+    llm_error: Optional[str] = None
+) -> EvaluateResponse:
+    """Fallback evaluation using rule-based logic when LLM is unavailable.
+    
+    Args:
+        state_dict: Current state dictionary.
+        result: Tool execution result.
+        retry_count: Current retry count.
+        max_retries: Maximum retry count.
+        llm_error: Optional LLM error message.
+        
+    Returns:
+        EvaluateResponse with fallback evaluation decision.
+    """
+    logger = get_logger(__name__)
+    
+    execution_status = result.get("status", "unknown")
+    error = result.get("error")
+    error_type = result.get("error_type")
+    tool_name = result.get("tool_name", "unknown")
+    
+    # Rule-based evaluation logic
+    if execution_status == "success":
+        decision = "advance"
+        reasoning = "Tool execution succeeded"
+        goal_progress = 0.8  # Assume good progress for successful execution
+    elif retry_count >= max_retries:
+        decision = "escalate"
+        reasoning = f"Maximum retries ({max_retries}) exceeded"
+        goal_progress = 0.0
+    elif error_type in ["validation_error", "not_found_error"]:
+        decision = "diagnose"
+        reasoning = f"Systematic error detected: {error_type}"
+        goal_progress = 0.0
+    elif error_type in ["tool_error", "network_error"]:
+        decision = "retry"
+        reasoning = f"Retryable error: {error_type}"
+        goal_progress = 0.2
+    else:
+        decision = "diagnose"
+        reasoning = f"Unknown error type: {error_type or 'unknown'}"
+        goal_progress = 0.0
+    
+    # Determine next step
+    if decision == "advance":
+        next_step = "answer"
+    elif decision == "retry":
+        next_step = "plan_step"
+        retry_count += 1
+    elif decision == "diagnose":
+        next_step = "diagnose"
+    else:  # escalate
+        next_step = "escalate"
+    
+    # Create evaluation result
+        evaluation_result = EvaluateResult(
+        status="success" if not llm_error else "error",
+        error=llm_error,
+        error_type="llm_error" if llm_error else None,
+            retry_count=retry_count,
+            max_retries=max_retries,
+        evaluation_timestamp=datetime.utcnow().isoformat(),
+        decision_reason=f"Fallback evaluation: {reasoning}",
+        goal_complete=decision == "advance" and goal_progress >= 0.9,
+        next_action=decision
     )
+    
+    # Create evaluation response
+    evaluation_response = EvaluateResponse(
+        current_step=next_step,
+        result=evaluation_result,
+        progress=[f"Fallback evaluation: {decision} - {reasoning}"],
+        artifacts=[Artifact(
+            type="fallback_evaluation",
+            data={
+                "decision": decision,
+                "reasoning": reasoning,
+                "goal_progress": goal_progress,
+                "llm_error": llm_error,
+                "retry_count": retry_count
+            }
+        )]
+    )
+    
+    # Add failure record if this was a retry
+    if decision == "retry" and error:
+        failure = Failure(
+            step="call_tool",
+            error=error,
+            attempt=retry_count,
+            error_type=error_type or "unknown"
+        )
+        evaluation_response.failures = state_dict.get("failures", []) + [failure]
+    
+    logger.info(f"Fallback evaluation: {decision} -> {next_step}")
+    
+    return evaluation_response
+
+
+def _get_recent_failures(state_dict: Dict[str, Any]) -> str:
+    """Get recent failures for evaluation context.
+    
+    Args:
+        state_dict: Current state dictionary.
+        
+    Returns:
+        Formatted string of recent failures.
+    """
+    failures = state_dict.get("failures", [])
+    if not failures:
+        return "No recent failures"
+    
+    # Get last 3 failures
+    recent_failures = failures[-3:] if len(failures) > 3 else failures
+    failure_lines = []
+    
+    for failure in recent_failures:
+        if isinstance(failure, dict):
+            step = failure.get("step", "unknown")
+            error = failure.get("error", "unknown error")
+            error_type = failure.get("error_type", "unknown")
+            attempt = failure.get("attempt", 0)
+            failure_lines.append(f"- {step} (attempt {attempt}): {error_type} - {error}")
+        else:
+            # Handle Pydantic model
+            failure_lines.append(f"- {failure.step} (attempt {failure.attempt}): {failure.error_type} - {failure.error}")
+    
+    return "\n".join(failure_lines) if failure_lines else "No recent failures"

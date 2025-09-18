@@ -10,7 +10,10 @@ from langgraph.runtime import get_runtime
 from pydantic import BaseModel, Field
 
 from ..models.specs import NodeSpec, EdgeSpec, MatchSpec
+from ..logging import get_logger
 
+
+logger = get_logger(__name__)
 
 class AddNodeInput(BaseModel):
     """Input schema for add_node tool."""
@@ -81,6 +84,10 @@ def add_node(
     Returns:
         Dictionary with operation result and created node information.
     """
+    
+    
+    logger.debug(f"Adding node: {label} with key: {key} and properties: {properties}")
+    
     try:
         graph_store = _get_graph_store_from_runtime()
         
@@ -94,6 +101,8 @@ def add_node(
         # Add node to graph store
         node = graph_store.upsert_node(node_spec)
         
+        logger.debug(f"Node created: {node}")
+        
         return {
             "status": "success",
             "message": f"Successfully created {label} node with key '{key}'",
@@ -105,6 +114,7 @@ def add_node(
             }
         }
     except Exception as e:
+        logger.error(f"Failed to create node: {str(e)}")
         return {
             "status": "error",
             "error": f"Failed to create node: {str(e)}",
@@ -130,6 +140,9 @@ def add_edge(
     Returns:
         Dictionary with operation result and created edge information.
     """
+
+    logger.debug(f"Adding edge: {from_node} to {to_node} with relationship: {relationship} and properties: {properties}")
+    
     try:
         graph_store = _get_graph_store_from_runtime()
         
@@ -144,6 +157,8 @@ def add_edge(
         # Add edge to graph store
         edge = graph_store.upsert_edge(edge_spec)
         
+        logger.debug(f"Edge created: {edge}")
+        
         return {
             "status": "success",
             "message": f"Successfully created {relationship} edge from '{from_node}' to '{to_node}'",
@@ -156,6 +171,7 @@ def add_edge(
             }
         }
     except Exception as e:
+        logger.error(f"Failed to create edge: {str(e)}")
         return {
             "status": "error",
             "error": f"Failed to create edge: {str(e)}",
@@ -179,6 +195,8 @@ def update_props(
     Returns:
         Dictionary with operation result.
     """
+    logger.debug(f"Updating properties: {target_type} with match spec: {match_spec} and properties: {properties}")
+    
     try:
         graph_store = _get_graph_store_from_runtime()
         
@@ -188,11 +206,14 @@ def update_props(
         # Update properties
         graph_store.update_props(match, properties)
         
+        logger.debug(f"Properties updated: {match}")
+        
         return {
             "status": "success",
             "message": f"Successfully updated properties for {target_type}"
         }
     except Exception as e:
+        logger.error(f"Failed to update properties: {str(e)}")
         return {
             "status": "error",
             "error": f"Failed to update properties: {str(e)}"
@@ -213,6 +234,8 @@ def delete_node(
     Returns:
         Dictionary with operation result.
     """
+    logger.debug(f"Deleting node: {target_type} with match spec: {match_spec}")
+    
     if target_type != "node":
         return {
             "status": "error",
@@ -228,11 +251,14 @@ def delete_node(
         # Delete node
         graph_store.delete_node(match)
         
+        logger.debug(f"Node deleted: {match}")
+        
         return {
             "status": "success",
             "message": "Successfully deleted node"
         }
     except Exception as e:
+        logger.error(f"Failed to delete node: {str(e)}")
         return {
             "status": "error",
             "error": f"Failed to delete node: {str(e)}"
@@ -253,6 +279,8 @@ def delete_edge(
     Returns:
         Dictionary with operation result.
     """
+    logger.debug(f"Deleting edge: {target_type} with match spec: {match_spec}")
+    
     if target_type != "edge":
         return {
             "status": "error",
@@ -268,11 +296,14 @@ def delete_edge(
         # Delete edge
         graph_store.delete_edge(match)
         
+        logger.debug(f"Edge deleted: {match}")
+        
         return {
             "status": "success",
             "message": "Successfully deleted edge"
         }
     except Exception as e:
+        logger.error(f"Failed to delete edge: {str(e)}")
         return {
             "status": "error",
             "error": f"Failed to delete edge: {str(e)}"
@@ -293,11 +324,15 @@ def query_graph(
     Returns:
         Dictionary with query results.
     """
+    logger.debug(f"Querying graph: {query} with limit: {limit}")
+    
     try:
         graph_store = _get_graph_store_from_runtime()
         
         # Execute query
         results = graph_store.run_cypher(query, {"limit": limit})
+        
+        logger.debug(f"Query results: {results}")
         
         return {
             "status": "success",
@@ -306,6 +341,7 @@ def query_graph(
             "query": query
         }
     except Exception as e:
+        logger.error(f"Query failed: {str(e)}")
         return {
             "status": "error",
             "error": f"Query failed: {str(e)}",
@@ -328,11 +364,15 @@ def cypher_query(
     Returns:
         Dictionary with query results and execution details.
     """
+    logger.debug(f"Executing Cypher query: {query} with limit: {limit}")
+    
     try:
         graph_store = _get_graph_store_from_runtime()
         
         # Execute Cypher query
         results = graph_store.run_cypher(query, {"limit": limit})
+        
+        logger.debug(f"Cypher query results: {results}")
         
         return {
             "status": "success",
@@ -342,6 +382,7 @@ def cypher_query(
             "execution_time": 0.1  # Placeholder
         }
     except Exception as e:
+        logger.error(f"Cypher query failed: {str(e)}")
         return {
             "status": "error",
             "error": f"Cypher query failed: {str(e)}",

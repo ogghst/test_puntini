@@ -138,6 +138,20 @@ class AnswerReturn(NodeReturnBase):
         return base_update
 
 
+class EvaluateReturn(NodeReturnBase):
+    """Return type for evaluate node function."""
+    
+    evaluate_response: Optional[Any] = Field(default=None, description="Evaluate response object")
+    
+    def to_state_update(self) -> Dict[str, Any]:
+        """Convert to state update including evaluate specific fields."""
+        base_update = super().to_state_update()
+        base_update.update({
+            "evaluate_response": self.evaluate_response
+        })
+        return base_update
+
+
 # Command return types for functions that return Command objects
 class CommandReturn(BaseModel):
     """Base class for Command return types."""

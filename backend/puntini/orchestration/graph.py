@@ -4,12 +4,13 @@ This module defines the main LangGraph state machine with nodes, edges,
 and conditional routing for the agent's execution flow.
 """
 
-from typing import Any, Dict, Literal, Optional, Union
+from typing import Any, Dict, Literal, Optional, Union, TYPE_CHECKING
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.types import Command
 from langgraph.runtime import Runtime
 from langchain_core.runnables import RunnableConfig
+from langgraph.errors import GraphRecursionError
 
 from .state_schema import State
 from .checkpointer import create_checkpointer, get_checkpoint_config
@@ -20,7 +21,7 @@ from ..nodes.message import (
 )
 from ..nodes.return_types import (
     ParseGoalReturn, PlanStepReturn, RouteToolReturn, CallToolReturn,
-    DiagnoseReturn, AnswerReturn, EvaluateCommandReturn, EscalateCommandReturn
+    DiagnoseReturn, AnswerReturn, EvaluateReturn, EvaluateCommandReturn, EscalateCommandReturn
 )
 
 
@@ -63,11 +64,14 @@ def route_after_parse_goal(state: State) -> str:
 def route_after_evaluate(state: State) -> str:
     """Route after evaluation based on step results.
     
+    This function analyzes the evaluation results and determines the next
+    action based on the evaluation decision, retry counts, and goal progress.
+    
     Args:
         state: Current agent state with evaluation results.
         
     Returns:
-        The next node to execute.
+        The next node to execute: "answer", "plan_step", "diagnose", or "escalate".
     """
     # Convert state to dict if needed
     if isinstance(state, dict):
@@ -86,24 +90,37 @@ def route_after_evaluate(state: State) -> str:
     # Handle both dict and object responses
     if isinstance(evaluate_response, dict):
         result = evaluate_response.get("result", {})
+        current_step = evaluate_response.get("current_step", "escalate")
         status = result.get("status", "error")
         retry_count = result.get("retry_count", 0)
         max_retries = result.get("max_retries", 3)
+        goal_complete = result.get("goal_complete", False)
+        next_action = result.get("next_action", "escalate")
     else:
         result = evaluate_response.result
+        current_step = evaluate_response.current_step
         status = result.status
         retry_count = result.retry_count
         max_retries = result.max_retries
+        goal_complete = result.goal_complete
+        next_action = result.next_action
     
+    # Use the current_step from the evaluation response as the primary routing decision
+    # The evaluate node has already made the intelligent decision
+    if current_step in ["answer", "plan_step", "diagnose", "escalate"]:
+        return current_step
+    
+    # Fallback routing logic if current_step is not a valid node
     if status == "success":
-        # Check if goal is complete
-        goal_complete = result.get("goal_complete", False) if isinstance(result, dict) else result.goal_complete
         if goal_complete:
             return "answer"
         else:
             return "plan_step"  # Continue with next step
-    elif status == "error" and retry_count < max_retries:
-        return "diagnose"
+    elif status == "error":
+        if retry_count < max_retries:
+            return "diagnose"
+        else:
+            return "escalate"
     else:
         return "escalate"
 
@@ -314,15 +331,26 @@ def call_tool(state: State, config: Optional[RunnableConfig] = None, runtime: Op
     return return_obj.to_state_update()
 
 
-def evaluate(state: State) -> Command:
-    """Evaluate the step result and decide next action.
+def evaluate(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
+    """Evaluate the step result and determine next action.
+    
+    This function delegates to the actual evaluate implementation
+    in the nodes module to maintain separation of concerns.
     
     Args:
-        state: Current agent state.
+        state: Current agent state with step execution results.
+        config: Optional RunnableConfig for additional configuration.
+        runtime: Optional Runtime context for additional runtime information.
         
     Returns:
-        Command with next node and state updates.
+        Dictionary with evaluation results and state updates.
     """
+    from ..nodes.evaluate import evaluate as evaluate_impl
+    from ..nodes.return_types import EvaluateReturn
+    
+    # Call the implementation and get the response
+    response = evaluate_impl(state, config, runtime)
+    
     # Convert state to dict if needed
     if isinstance(state, dict):
         state_dict = state
@@ -330,13 +358,19 @@ def evaluate(state: State) -> Command:
         # Convert Pydantic model to dictionary
         state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
-    # TODO: Implement evaluation logic
-    # For now, use a simple evaluation based on current result
-    result = state_dict.get("result")
-    if result and result.get("status") == "success":
-        return Command(update={"current_step": "answer"}, goto="answer")
-    else:
-        return Command(update={"current_step": "diagnose"}, goto="diagnose")
+    # Create the proper return type and convert to state update
+    return_obj = EvaluateReturn(
+        current_step=response.current_step,
+        progress=state_dict.get("progress", []) + response.progress,
+        artifacts=state_dict.get("artifacts", []) + response.artifacts,
+        failures=state_dict.get("failures", []) + response.failures,
+        result=response.result.model_dump() if response.result else None,
+        evaluate_response=response
+    )
+    
+    return return_obj.to_state_update()
+
+
 
 
 def diagnose(state: State) -> Dict[str, Any]:
