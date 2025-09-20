@@ -31,10 +31,10 @@ from .models import (
     parse_message,
 )
 from .session import SessionManager, session_manager
-from ..agents.agent_factory import create_simple_agent
+from ..agents.agent_factory import create_simple_agent, create_agent_with_components
 from ..graph.graph_store_factory import create_memory_graph_store
 from ..context.context_manager_factory import create_simple_context_manager
-from ..tools.tool_registry_factory import create_standard_tool_registry
+from ..tools.tool_setup import create_configured_tool_registry
 from ..observability.tracer_factory import create_console_tracer
 
 
@@ -59,11 +59,16 @@ class WebSocketManager:
             # Create agent components
             graph_store = create_memory_graph_store()
             context_manager = create_simple_context_manager()
-            tool_registry = create_standard_tool_registry()
+            tool_registry = create_configured_tool_registry()
             tracer = create_console_tracer()
             
-            # Create the agent
-            self.agent = create_simple_agent()
+            # Create the agent with components
+            self.agent = create_agent_with_components(
+                graph_store=graph_store,
+                context_manager=context_manager,
+                tool_registry=tool_registry,
+                tracer=tracer
+            )
             
             print("Agent initialized successfully")
         except Exception as e:
@@ -301,11 +306,15 @@ class WebSocketManager:
             from ..orchestration.state import State
             from ..agents.agent_factory import create_initial_state
             
-            # Create components
-            graph_store = create_memory_graph_store()
-            context_manager = create_simple_context_manager()
-            tool_registry = create_standard_tool_registry()
-            tracer = create_console_tracer()
+            # Get components from the agent
+            components = getattr(self.agent, '_components', {})
+            graph_store = components.get('graph_store')
+            context_manager = components.get('context_manager')
+            tool_registry = components.get('tool_registry')
+            tracer = components.get('tracer')
+            
+            if not all([graph_store, context_manager, tool_registry, tracer]):
+                raise ValueError("Agent components not properly initialized")
             
             # Create initial state
             initial_state = create_initial_state(

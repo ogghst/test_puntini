@@ -4,7 +4,7 @@ This module defines all the tools available to the agent for
 graph manipulation operations.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TypedDict, Optional
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from langgraph.runtime import get_runtime
@@ -13,6 +13,79 @@ from ..models.specs import NodeSpec, EdgeSpec, MatchSpec
 from ..models.node import Node
 from ..models.edge import Edge
 from ..interfaces.graph_store import GraphStore
+
+
+# TypedDict definitions for tool outputs
+class NodeInfo(TypedDict):
+    """Information about a node."""
+    id: str
+    label: str
+    key: str
+    properties: Dict[str, Any]
+
+
+class EdgeInfo(TypedDict):
+    """Information about an edge."""
+    id: str
+    from_key: str
+    to_key: str
+    relationship: str
+    properties: Dict[str, Any]
+
+
+class GraphToolSuccessOutput(TypedDict):
+    """Base success output for graph tools."""
+    status: str  # "success"
+    message: str
+
+
+class GraphToolErrorOutput(TypedDict):
+    """Base error output for graph tools."""
+    status: str  # "error"
+    error: str
+
+
+class AddNodeOutput(TypedDict):
+    """Output for add_node tool."""
+    status: str
+    message: str
+    node: Optional[NodeInfo]
+
+
+class AddEdgeOutput(TypedDict):
+    """Output for add_edge tool."""
+    status: str
+    message: str
+    edge: Optional[EdgeInfo]
+
+
+class UpdatePropsOutput(TypedDict):
+    """Output for update_props tool."""
+    status: str
+    message: str
+
+
+class DeleteOutput(TypedDict):
+    """Output for delete tools."""
+    status: str
+    message: str
+
+
+class QueryOutput(TypedDict):
+    """Output for query tools."""
+    status: str
+    message: str
+    results: List[Any]
+    query: str
+
+
+class CypherQueryOutput(TypedDict):
+    """Output for cypher_query tool."""
+    status: str
+    message: str
+    results: List[Any]
+    query: str
+    execution_time: float
 
 
 class AddNodeInput(BaseModel):
@@ -54,7 +127,7 @@ def add_node(
     label: str,
     key: str,
     properties: Dict[str, Any] = None
-) -> Dict[str, Any]:
+) -> AddNodeOutput:
     """Add a new node to the graph.
     
     Args:
@@ -80,22 +153,22 @@ def add_node(
         # Add node to graph store
         node = graph_store.upsert_node(node_spec)
         
-        return {
-            "status": "success",
-            "message": f"Successfully created {label} node with key '{key}'",
-            "node": {
-                "id": str(node.id),
-                "label": node.label,
-                "key": node.key,
-                "properties": node.properties
-            }
-        }
+        return AddNodeOutput(
+            status="success",
+            message=f"Successfully created {label} node with key '{key}'",
+            node=NodeInfo(
+                id=str(node.id),
+                label=node.label,
+                key=node.key,
+                properties=node.properties
+            )
+        )
     except Exception as e:
-        return {
-            "status": "error",
-            "error": f"Failed to create node: {str(e)}",
-            "node": None
-        }
+        return AddNodeOutput(
+            status="error",
+            error=f"Failed to create node: {str(e)}",
+            node=None
+        )
 
 
 @tool("add_edge", args_schema=AddEdgeInput)
@@ -104,7 +177,7 @@ def add_edge(
     to_node: str,
     relationship: str,
     properties: Dict[str, Any] = None
-) -> Dict[str, Any]:
+) -> AddEdgeOutput:
     """Add a new edge/relationship to the graph.
     
     Args:
@@ -132,23 +205,23 @@ def add_edge(
         # Add edge to graph store
         edge = graph_store.upsert_edge(edge_spec)
         
-        return {
-            "status": "success",
-            "message": f"Successfully created {relationship} edge from '{from_node}' to '{to_node}'",
-            "edge": {
-                "id": str(edge.id),
-                "from_key": edge.from_key,
-                "to_key": edge.to_key,
-                "relationship": edge.relationship,
-                "properties": edge.properties
-            }
-        }
+        return AddEdgeOutput(
+            status="success",
+            message=f"Successfully created {relationship} edge from '{from_node}' to '{to_node}'",
+            edge=EdgeInfo(
+                id=str(edge.id),
+                from_key=edge.from_key,
+                to_key=edge.to_key,
+                relationship=edge.relationship,
+                properties=edge.properties
+            )
+        )
     except Exception as e:
-        return {
-            "status": "error",
-            "error": f"Failed to create edge: {str(e)}",
-            "edge": None
-        }
+        return AddEdgeOutput(
+            status="error",
+            error=f"Failed to create edge: {str(e)}",
+            edge=None
+        )
 
 
 @tool("update_props", args_schema=UpdatePropsInput)
@@ -156,7 +229,7 @@ def update_props(
     target_type: str,
     match_spec: Dict[str, Any],
     properties: Dict[str, Any]
-) -> Dict[str, Any]:
+) -> UpdatePropsOutput:
     """Update properties of a node or edge.
     
     Args:
@@ -178,22 +251,22 @@ def update_props(
         # Update properties
         graph_store.update_props(match, properties)
         
-        return {
-            "status": "success",
-            "message": f"Successfully updated properties for {target_type}"
-        }
+        return UpdatePropsOutput(
+            status="success",
+            message=f"Successfully updated properties for {target_type}"
+        )
     except Exception as e:
-        return {
-            "status": "error",
-            "error": f"Failed to update properties: {str(e)}"
-        }
+        return UpdatePropsOutput(
+            status="error",
+            error=f"Failed to update properties: {str(e)}"
+        )
 
 
 @tool("delete_node", args_schema=DeleteInput)
 def delete_node(
     target_type: str,
     match_spec: Dict[str, Any]
-) -> Dict[str, Any]:
+) -> DeleteOutput:
     """Delete a node from the graph.
     
     Args:
@@ -204,10 +277,10 @@ def delete_node(
         Dictionary with operation result.
     """
     if target_type != "node":
-        return {
-            "status": "error",
-            "error": "target_type must be 'node' for delete_node tool"
-        }
+        return DeleteOutput(
+            status="error",
+            error="target_type must be 'node' for delete_node tool"
+        )
     
     try:
         # Get graph store from runtime context
@@ -220,22 +293,22 @@ def delete_node(
         # Delete node
         graph_store.delete_node(match)
         
-        return {
-            "status": "success",
-            "message": "Successfully deleted node"
-        }
+        return DeleteOutput(
+            status="success",
+            message="Successfully deleted node"
+        )
     except Exception as e:
-        return {
-            "status": "error",
-            "error": f"Failed to delete node: {str(e)}"
-        }
+        return DeleteOutput(
+            status="error",
+            error=f"Failed to delete node: {str(e)}"
+        )
 
 
 @tool("delete_edge", args_schema=DeleteInput)
 def delete_edge(
     target_type: str,
     match_spec: Dict[str, Any]
-) -> Dict[str, Any]:
+) -> DeleteOutput:
     """Delete an edge from the graph.
     
     Args:
@@ -246,10 +319,10 @@ def delete_edge(
         Dictionary with operation result.
     """
     if target_type != "edge":
-        return {
-            "status": "error",
-            "error": "target_type must be 'edge' for delete_edge tool"
-        }
+        return DeleteOutput(
+            status="error",
+            error="target_type must be 'edge' for delete_edge tool"
+        )
     
     try:
         # Get graph store from runtime context
@@ -262,22 +335,22 @@ def delete_edge(
         # Delete edge
         graph_store.delete_edge(match)
         
-        return {
-            "status": "success",
-            "message": "Successfully deleted edge"
-        }
+        return DeleteOutput(
+            status="success",
+            message="Successfully deleted edge"
+        )
     except Exception as e:
-        return {
-            "status": "error",
-            "error": f"Failed to delete edge: {str(e)}"
-        }
+        return DeleteOutput(
+            status="error",
+            error=f"Failed to delete edge: {str(e)}"
+        )
 
 
 @tool("query_graph", args_schema=QueryInput)
 def query_graph(
     query: str,
     limit: int = 100
-) -> Dict[str, Any]:
+) -> QueryOutput:
     """Query the graph using a simple pattern.
     
     Args:
@@ -295,26 +368,26 @@ def query_graph(
         # Execute query
         results = graph_store.run_cypher(query, {"limit": limit})
         
-        return {
-            "status": "success",
-            "message": f"Query executed successfully, found {len(results) if isinstance(results, list) else 1} results",
-            "results": results if isinstance(results, list) else [results],
-            "query": query
-        }
+        return QueryOutput(
+            status="success",
+            message=f"Query executed successfully, found {len(results) if isinstance(results, list) else 1} results",
+            results=results if isinstance(results, list) else [results],
+            query=query
+        )
     except Exception as e:
-        return {
-            "status": "error",
-            "error": f"Query failed: {str(e)}",
-            "results": [],
-            "query": query
-        }
+        return QueryOutput(
+            status="error",
+            error=f"Query failed: {str(e)}",
+            results=[],
+            query=query
+        )
 
 
 @tool("cypher_query", args_schema=QueryInput)
 def cypher_query(
     query: str,
     limit: int = 100
-) -> Dict[str, Any]:
+) -> CypherQueryOutput:
     """Execute a custom Cypher query on the graph.
     
     Args:
@@ -332,20 +405,21 @@ def cypher_query(
         # Execute Cypher query
         results = graph_store.run_cypher(query, {"limit": limit})
         
-        return {
-            "status": "success",
-            "message": f"Cypher query executed successfully, found {len(results) if isinstance(results, list) else 1} results",
-            "results": results if isinstance(results, list) else [results],
-            "query": query,
-            "execution_time": 0.1  # Placeholder
-        }
+        return CypherQueryOutput(
+            status="success",
+            message=f"Cypher query executed successfully, found {len(results) if isinstance(results, list) else 1} results",
+            results=results if isinstance(results, list) else [results],
+            query=query,
+            execution_time=0.1  # Placeholder
+        )
     except Exception as e:
-        return {
-            "status": "error",
-            "error": f"Cypher query failed: {str(e)}",
-            "results": [],
-            "query": query
-        }
+        return CypherQueryOutput(
+            status="error",
+            error=f"Cypher query failed: {str(e)}",
+            results=[],
+            query=query,
+            execution_time=0.0
+        )
 
 
 # List of all available tools

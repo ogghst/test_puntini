@@ -148,7 +148,7 @@ Return a GoalSpec object with all extracted information."""),
         
         # Parse the goal
         logger.info("Invoking LLM for goal parsing", extra={"goal_preview": goal[:100] + "..." if len(goal) > 100 else goal})
-        parsed_goal_spec = parsing_chain.invoke({"goal": goal})
+        parsed_goal_spec : GoalSpec = parsing_chain.invoke({"goal": goal})
         
         logger.info(
             "Successfully parsed goal",
@@ -314,16 +314,7 @@ def _determine_next_step(goal_spec: GoalSpec, current_attempt: int) -> str:
     """
     logger = get_logger(__name__)
     
-    # Simple goals might skip planning
-    if goal_spec.is_simple_goal() and goal_spec.complexity == GoalComplexity.SIMPLE:
-        logger.debug("Simple goal detected, routing to tool", extra={"complexity": goal_spec.complexity.value})
-        return "route_tool"
-    
-    # Complex goals need planning
-    if goal_spec.complexity in [GoalComplexity.MEDIUM, GoalComplexity.COMPLEX]:
-        logger.debug("Complex goal detected, routing to planning", extra={"complexity": goal_spec.complexity.value})
-        return "plan_step"
-    
-    # Default to planning for safety
-    logger.debug("Defaulting to planning step for safety", extra={"complexity": goal_spec.complexity.value if goal_spec.complexity else None})
+    # All goals should go through planning step first as per AGENTS.md specification
+    # The planning step will determine the appropriate tool and create the tool signature
+    logger.debug("Routing to planning step for all goals", extra={"complexity": goal_spec.complexity.value if goal_spec.complexity else None})
     return "plan_step"

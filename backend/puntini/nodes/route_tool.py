@@ -4,6 +4,7 @@ This module implements the route_tool node that selects the
 appropriate tool or branch to ask/diagnose paths.
 """
 
+from ast import List
 from typing import Any, Dict, Optional, TYPE_CHECKING
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
@@ -11,6 +12,7 @@ from langgraph.runtime import Runtime
 if TYPE_CHECKING:
     from ..orchestration.state_schema import State
 from ..interfaces.tool_registry import ToolRegistry
+from ..models.specs import ToolSpec
 from ..models.errors import ValidationError, NotFoundError
 from ..logging import get_logger
 from .message import RouteToolResponse, RouteToolResult, Artifact, ErrorContext
@@ -49,7 +51,12 @@ def route_tool(
         ValidationError: If tool signature is invalid.
         NotFoundError: If specified tool is not available.
     """
-    tool_signature = state.tool_signature or {}
+    # Handle both dict and object state
+    if isinstance(state, dict):
+        tool_signature = state.get("tool_signature") or {}
+    else:
+        tool_signature = getattr(state, "tool_signature", None) or {}
+    
     tool_name = tool_signature.get("tool_name")
     tool_args = tool_signature.get("tool_args", {})
     reasoning = tool_signature.get("reasoning", "No reasoning provided")
@@ -71,7 +78,10 @@ def route_tool(
         )
     
     # Get tool registry from state
-    tool_registry = state.tool_registry
+    if isinstance(state, dict):
+        tool_registry : ToolRegistry = state.get("tool_registry")
+    else:
+        tool_registry : ToolRegistry = getattr(state, "tool_registry", None)
     if tool_registry is None:
         error_msg = "Tool registry not available in state. Ensure agent is created with create_initial_state()"
         logger.error(error_msg)
@@ -86,7 +96,7 @@ def route_tool(
     
     # Check tool availability
     try:
-        available_tools = [tool.name for tool in tool_registry.list()]
+        available_tools : List[str] = [tool.name for tool in tool_registry.list()]
         if tool_name not in available_tools:
             error_msg = f"Tool '{tool_name}' not found in registry. Available tools: {available_tools}"
             logger.error(error_msg)
@@ -94,7 +104,7 @@ def route_tool(
                 current_step="diagnose",
                 error_context=ErrorContext(
                     type="not_found_error",
-                    message=error_msg,
+                    message=error_msg,  
                     details={
                         "requested_tool": tool_name,
                         "available_tools": available_tools
@@ -103,7 +113,7 @@ def route_tool(
             )
         
         # Get tool specification for validation
-        tool_spec = None
+        tool_spec : ToolSpec | None = None
         for tool in tool_registry.list():
             if tool.name == tool_name:
                 tool_spec = tool

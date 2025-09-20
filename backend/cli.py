@@ -20,6 +20,88 @@ from langfuse import get_client
 import uuid
 
 
+def print_graph_summary(graph_store):
+    """Print a summary of the graph showing all nodes and edges.
+    
+    Args:
+        graph_store: The graph store instance to query.
+    """
+    try:
+        # Get all nodes and edges
+        nodes = graph_store.get_all_nodes()
+        edges = graph_store.get_all_edges()
+        
+        click.echo("\n" + "="*60)
+        click.echo("📊 GRAPH SUMMARY")
+        click.echo("="*60)
+        
+        # Print nodes
+        click.echo(f"\n🔵 NODES ({len(nodes)} total):")
+        if not nodes:
+            click.echo("  No nodes found in the graph.")
+        else:
+            for i, node in enumerate(nodes, 1):
+                click.echo(f"  {i}. [{node.label}] {node.key}")
+                click.echo(f"     ID: {node.id}")
+                if node.properties:
+                    props_str = ", ".join([f"{k}={v}" for k, v in node.properties.items()])
+                    click.echo(f"     Properties: {props_str}")
+                else:
+                    click.echo("     Properties: None")
+        
+        # Print edges
+        click.echo(f"\n🔗 EDGES ({len(edges)} total):")
+        if not edges:
+            click.echo("  No edges found in the graph.")
+        else:
+            for i, edge in enumerate(edges, 1):
+                click.echo(f"  {i}. ({edge.source_label}:{edge.source_key}) --[{edge.relationship_type}]--> ({edge.target_label}:{edge.target_key})")
+                click.echo(f"     ID: {edge.id}")
+                if edge.properties:
+                    props_str = ", ".join([f"{k}={v}" for k, v in edge.properties.items()])
+                    click.echo(f"     Properties: {props_str}")
+                else:
+                    click.echo("     Properties: None")
+        
+        # Print graph statistics
+        click.echo(f"\n📈 STATISTICS:")
+        click.echo(f"  Total Nodes: {len(nodes)}")
+        click.echo(f"  Total Edges: {len(edges)}")
+        
+        # Group nodes by label
+        label_counts = {}
+        for node in nodes:
+            label_counts[node.label] = label_counts.get(node.label, 0) + 1
+        
+        if label_counts:
+            click.echo(f"  Nodes by Label:")
+            for label, count in sorted(label_counts.items()):
+                click.echo(f"    {label}: {count}")
+        
+        # Group edges by relationship type
+        rel_counts = {}
+        for edge in edges:
+            rel_counts[edge.relationship_type] = rel_counts.get(edge.relationship_type, 0) + 1
+        
+        if rel_counts:
+            click.echo(f"  Edges by Relationship:")
+            for rel_type, count in sorted(rel_counts.items()):
+                click.echo(f"    {rel_type}: {count}")
+        
+        click.echo("="*60)
+        
+    except Exception as e:
+        click.echo(f"❌ Error printing graph summary: {e}")
+        if hasattr(graph_store, '_nodes') and hasattr(graph_store, '_edges'):
+            # Fallback: try to access internal data directly
+            try:
+                nodes = list(graph_store._nodes.values())
+                edges = list(graph_store._edges.values())
+                click.echo(f"  Fallback: Found {len(nodes)} nodes and {len(edges)} edges")
+            except Exception as fallback_error:
+                click.echo(f"  Fallback also failed: {fallback_error}")
+
+
 
 @click.group()
 def cli():
@@ -125,12 +207,19 @@ def run(goal: str, config: str | None, verbose: bool, tracer: str):
             "tool_registry": tool_registry,
             "tracer": tracer
         }
-        config = {"configurable": {"thread_id": thread_id}, "callbacks": [langfuse_handler]}
+        config = {
+            "configurable": {"thread_id": thread_id}, 
+            "callbacks": [langfuse_handler],
+            "recursion_limit": 100  # Increase from default 25 to 100
+        }
         
         result = agent.invoke(initial_state, config=config, context=context)
         click.echo(f"✅ Agent completed successfully!")
         if verbose:
             click.echo(f"Result: {result}")
+        
+        # Print graph summary
+        print_graph_summary(graph_store)
         
     except Exception as e:
         click.echo(f"❌ Agent failed: {e}")

@@ -28,6 +28,15 @@ from .graph_tools import (
     query_graph,
     cypher_query,
     GRAPH_TOOLS,
+    # TypedDict output types
+    NodeInfo,
+    EdgeInfo,
+    AddNodeOutput,
+    AddEdgeOutput,
+    UpdatePropsOutput,
+    DeleteOutput,
+    QueryOutput,
+    CypherQueryOutput,
 )
 from .tool_setup import (
     create_tool_spec_from_langchain_tool,
@@ -60,6 +69,16 @@ __all__ = [
     "query_graph",
     "cypher_query",
     "GRAPH_TOOLS",
+    
+    # TypedDict output types
+    "NodeInfo",
+    "EdgeInfo",
+    "AddNodeOutput",
+    "AddEdgeOutput",
+    "UpdatePropsOutput",
+    "DeleteOutput",
+    "QueryOutput",
+    "CypherQueryOutput",
     
     # Tool setup utilities
     "create_tool_spec_from_langchain_tool",

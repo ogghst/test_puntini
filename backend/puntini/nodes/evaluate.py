@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from ..orchestration.state_schema import State
 from ..logging import get_logger
 from ..models.errors import ValidationError, AgentError
+from .message import CallToolResponse
 from .message import EvaluateResponse, EvaluateResult, Failure, Artifact, ErrorContext
 
 
@@ -64,9 +65,11 @@ def evaluate(
     else:
         # Convert Pydantic model to dictionary
         state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+        
+    logger.info(f"Evaluating state: {state_dict}")
     
     # Get current step result from call_tool_response
-    call_tool_response = state_dict.get("call_tool_response")
+    call_tool_response : CallToolResponse = state_dict.get("call_tool_response")
     if not call_tool_response:
         error_msg = "No call_tool_response found in state for evaluation"
         logger.error(error_msg)
@@ -89,12 +92,12 @@ def evaluate(
         )
     
     # Extract result information
-    result = call_tool_response.get("result", {})
-    tool_name = result.get("tool_name", "unknown")
-    execution_status = result.get("status", "unknown")
-    execution_time = result.get("execution_time", 0.0)
-    error = result.get("error")
-    error_type = result.get("error_type")
+    result = call_tool_response.result
+    tool_name = result.tool_name
+    execution_status = result.status
+    execution_time = result.execution_time
+    error = result.error
+    error_type = result.error_type
     
     # Get current retry information
     retry_count = state_dict.get("retry_count", 0)

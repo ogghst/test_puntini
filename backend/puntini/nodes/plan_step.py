@@ -116,8 +116,8 @@ def plan_step(state: "State", config: Optional[RunnableConfig] = None, runtime: 
     parsed_goal_data = None
     artifacts = state_dict.get("artifacts", [])
     for artifact in artifacts:
-        if artifact.get("type") == "parsed_goal":
-            parsed_goal_data = artifact.get("data")
+        if artifact.type == "parsed_goal":
+            parsed_goal_data = artifact.data
             break
     
     if not parsed_goal_data:
@@ -153,23 +153,26 @@ def plan_step(state: "State", config: Optional[RunnableConfig] = None, runtime: 
         )
                    
         # Get tool specifications dynamically from registry
-        tool_registry = state.tool_registry
+        if isinstance(state, dict):
+            tool_registry = state.get("tool_registry")
+        else:
+            tool_registry = getattr(state, "tool_registry", None)
         tool_specifications = _get_tool_specifications_from_registry(tool_registry)
         
         # Create planning prompt
         prompt = ChatPromptTemplate.from_messages([
             ("system", f"""You are an expert at planning graph manipulation steps for an AI agent.
 
-Your task is to plan the next micro-step to achieve the user's goal. You have access to these tools:
+Your task is to analyze the user's goal and plan the next micro-step. You have access to these tools:
 
 {tool_specifications}
 
-Based on the parsed goal information, plan the next step:
-1. Choose the most appropriate tool
-2. Provide ALL required arguments for the tool (ensure all REQUIRED fields are included)
-3. Explain your reasoning
-4. Assess your confidence in this plan
-5. Indicate if this is the final step
+Based on the parsed goal information, analyze and plan the next step:
+1. Choose the most appropriate tool from the available tools
+2. Provide ALL required arguments for the selected tool (ensure all REQUIRED fields are included)
+3. Explain your reasoning for choosing this tool and these arguments
+4. Assess your confidence in this plan (0.0 to 1.0)
+5. Indicate if this is the final step needed to complete the goal
 
 Guidelines:
 - ALWAYS include ALL REQUIRED arguments for the selected tool
@@ -179,7 +182,7 @@ Guidelines:
 - Provide clear reasoning for your choices
 - Be realistic about confidence levels
 
-Return a StepPlan object with your analysis."""),
+IMPORTANT: Return a structured StepPlan object, not a tool call. The tool_name should be one of the available tools listed above."""),
             ("human", """Parsed Goal Information:
 {goal_info}
 
@@ -225,6 +228,10 @@ Plan the next step to move towards achieving this goal.""")
     except Exception as e:
         # Handle planning errors gracefully
         error_msg = f"Step planning failed: {str(e)}"
+        logger.error("Step planning failed with exception", extra={
+            "error_type": type(e).__name__,
+            "error_message": str(e)
+        })
         
         return PlanStepResponse(
             current_step="diagnose",

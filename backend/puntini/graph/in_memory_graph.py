@@ -482,3 +482,19 @@ class InMemoryGraphStore:
                     return False
         
         return True
+    
+    def get_all_nodes(self) -> List[Node]:
+        """Get all nodes in the graph.
+        
+        Returns:
+            List of all nodes in the graph.
+        """
+        return list(self._nodes.values())
+    
+    def get_all_edges(self) -> List[Edge]:
+        """Get all edges in the graph.
+        
+        Returns:
+            List of all edges in the graph.
+        """
+        return list(self._edges.values())

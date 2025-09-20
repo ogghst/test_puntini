@@ -52,7 +52,12 @@ def call_tool(
         ValidationError: If tool arguments are invalid.
         NotFoundError: If tool is not available.
     """
-    tool_signature = state.tool_signature or {}
+    # Handle both dict and object state
+    if isinstance(state, dict):
+        tool_signature = state.get("tool_signature") or {}
+    else:
+        tool_signature = getattr(state, "tool_signature", None) or {}
+    
     tool_name = tool_signature.get("tool_name")
     tool_args = tool_signature.get("tool_args", {})
     routing_decision = tool_signature.get("routing_decision", {})
@@ -80,7 +85,10 @@ def call_tool(
         )
     
     # Get tool registry from state
-    tool_registry = state.tool_registry
+    if isinstance(state, dict):
+        tool_registry = state.get("tool_registry")
+    else:
+        tool_registry = getattr(state, "tool_registry", None)
     if tool_registry is None:
         error_msg = "Tool registry not available in state. Ensure agent is created with create_initial_state()"
         logger.error(error_msg)
@@ -122,9 +130,17 @@ def call_tool(
         execution_time = time.time() - start_time
         
         # Normalize result
-        normalized_result = _normalize_tool_result(raw_result, tool_name, execution_time)
+        normalized_result : CallToolResult = _normalize_tool_result(raw_result, tool_name, execution_time)
         
         logger.info(f"Successfully executed tool '{tool_name}' in {execution_time:.3f}s")
+        
+        if normalized_result.status != "success":
+            return CallToolResponse(
+                current_step="diagnose",
+                result=normalized_result,
+                progress=[f"Failed to execute tool: {tool_name}"],
+                artifacts=[Artifact(type="tool_execution", data={"tool_name": tool_name, "execution_time": execution_time, "status": "error", "result_summary": _summarize_result(normalized_result)})]
+            )
         
         return CallToolResponse(
             current_step="evaluate",
@@ -234,13 +250,25 @@ def _normalize_tool_result(raw_result: Any, tool_name: str, execution_time: floa
         Normalized CallToolResult object.
     """
     if isinstance(raw_result, dict):
-        # If already a dict, add metadata
+        # Check if it's a graph tool result with specific structure
+        if "status" in raw_result and "message" in raw_result:
+            # This is likely a TypedDict from graph tools
+            result_type = "graph_tool"
+            if "node" in raw_result:
+                result_type = "add_node"
+            elif "edge" in raw_result:
+                result_type = "add_edge"
+            elif "results" in raw_result:
+                result_type = "query_result"
+        else:
+            result_type = "dict"
+        
         return CallToolResult(
             status="success",
             tool_name=tool_name,
             result=raw_result,
             execution_time=execution_time,
-            result_type="dict"
+            result_type=result_type
         )
     elif isinstance(raw_result, str):
         # If string, wrap in result
@@ -289,6 +317,18 @@ def _summarize_result(result: CallToolResult) -> str:
     
     if result_type == "dict":
         return f"Tool '{tool_name}' completed successfully in {execution_time:.3f}s"
+    elif result_type == "graph_tool":
+        message = result.result.get("message", "") if result.result else ""
+        return f"Tool '{tool_name}' completed: {message[:100]}{'...' if len(message) > 100 else ''}"
+    elif result_type == "add_node":
+        message = result.result.get("message", "") if result.result else ""
+        return f"Tool '{tool_name}' created node: {message[:100]}{'...' if len(message) > 100 else ''}"
+    elif result_type == "add_edge":
+        message = result.result.get("message", "") if result.result else ""
+        return f"Tool '{tool_name}' created edge: {message[:100]}{'...' if len(message) > 100 else ''}"
+    elif result_type == "query_result":
+        count = len(result.result.get("results", [])) if result.result else 0
+        return f"Tool '{tool_name}' returned {count} results in {execution_time:.3f}s"
     elif result_type == "string":
         message = result.result.get("message", "") if result.result else ""
         return f"Tool '{tool_name}' returned: {message[:100]}{'...' if len(message) > 100 else ''}"
