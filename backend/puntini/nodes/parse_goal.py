@@ -48,16 +48,16 @@ def parse_goal(state: "State", config: Optional[RunnableConfig] = None, runtime:
     # Initialize logger for this module
     logger = get_logger(__name__)
     
-    # Validate state input and convert to dict if needed
+    # Access state attributes - handle both dict and object access
     logger.debug(f"State type: {type(state)}, State value: {state}")
-    if isinstance(state, dict):
-        state_dict = state
-    else:
-        # Convert Pydantic model to dictionary
-        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
-    goal = state_dict.get("goal")
-    current_attempt = state_dict.get("current_attempt", 1)
+    if isinstance(state, dict):
+        goal = state.get("goal")
+        current_attempt = state.get("current_attempt", 1)
+    else:
+        goal = getattr(state, "goal", None)
+        current_attempt = getattr(state, "current_attempt", 1)
+    
     
     # Validate required fields
     if not isinstance(goal, str):
@@ -129,6 +129,17 @@ For each goal, extract:
 3. DOMAIN_HINTS: Context clues about the domain (project management, social network, etc.)
 4. COMPLEXITY: Assess how complex the goal is (simple/medium/complex)
 5. INTENT: The primary purpose or objective
+6. TODO_LIST: Create a step-by-step plan of actions to complete the goal
+
+For the TODO_LIST, create specific, actionable items that:
+- Break down the goal into concrete steps
+- Use clear, descriptive language (e.g., "create the Project entity", "add relationship between User and Project")
+- Include step numbers for execution order
+- Specify which tool might be needed (add_node, add_edge, update_props, query_graph, etc.)
+- Estimate complexity (low, medium, high) for each step
+- Set initial status as "planned"
+- For dependencies: use step numbers as STRINGS (e.g., ["1", "2"]) not integers
+- Dependencies should reference other todo step numbers that must be completed first
 
 Guidelines:
 - Be precise in entity extraction - identify names, labels, and properties
@@ -137,8 +148,10 @@ Guidelines:
 - Extract domain context that might help with execution
 - Be conservative with complexity assessment
 - Focus on actionable, structured information
+- Create todos that are specific enough to be executed by tools
+- Ensure todos are in logical execution order
 
-Return a GoalSpec object with all extracted information."""),
+Return a GoalSpec object with all extracted information including the todo_list."""),
             ("human", "Parse this goal: {goal}")
         ])
         
@@ -153,6 +166,7 @@ Return a GoalSpec object with all extracted information."""),
         logger.info(
             "Successfully parsed goal",
             extra={
+                "parsed_todos": len(parsed_goal_spec.todo_list) if parsed_goal_spec.todo_list else 0,
                 "parsed_entities": len(parsed_goal_spec.entities) if parsed_goal_spec.entities else 0,
                 "complexity": parsed_goal_spec.complexity.value if parsed_goal_spec.complexity else None,
                 "intent_length": len(parsed_goal_spec.intent) if parsed_goal_spec.intent else 0
@@ -196,7 +210,7 @@ Return a GoalSpec object with all extracted information."""),
         result = ParseGoalResponse(
             current_step=next_step,
             current_attempt=1,  # Reset attempt counter for next phase
-            artifacts=[Artifact(type="parsed_goal", data=parsed_goal_dict)],
+            artifacts=[],  # No longer need parsed_goal artifact
             progress=[f"Parsed goal: {parsed_goal_spec.intent}"],
             result=ParseGoalResult(
                 status="success",
@@ -204,7 +218,9 @@ Return a GoalSpec object with all extracted information."""),
                 complexity=parsed_goal_spec.complexity.value if parsed_goal_spec.complexity else None,
                 requires_graph_ops=parsed_goal_spec.requires_graph_operations(),
                 is_simple=parsed_goal_spec.is_simple_goal()
-            )
+            ),
+            goal_spec=parsed_goal_spec,  # Store GoalSpec directly in response
+            todo_list=parsed_goal_spec.todo_list  # Store todo list directly in response
         )
         
         logger.info(

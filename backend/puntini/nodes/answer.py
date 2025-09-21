@@ -35,18 +35,17 @@ def answer(
         The answer should summarize the execution results and
         provide a clear conclusion to the agent's task.
     """
-    # Convert state to dict if needed
-    if isinstance(state, dict):
-        state_dict = state
-    else:
-        # Convert Pydantic model to dictionary
-        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
-    
     # Get execution information
-    result = state_dict.get("result", {})
-    progress = state_dict.get("progress", [])
-    artifacts = state_dict.get("artifacts", [])
-    failures = state_dict.get("failures", [])
+    if isinstance(state, dict):
+        result = state.get("result", {})
+        progress = state.get("progress", [])
+        artifacts = state.get("artifacts", [])
+        failures = state.get("failures", [])
+    else:
+        result = getattr(state, "result", {})
+        progress = getattr(state, "progress", [])
+        artifacts = getattr(state, "artifacts", [])
+        failures = getattr(state, "failures", [])
     
     # Determine completion status
     if failures:

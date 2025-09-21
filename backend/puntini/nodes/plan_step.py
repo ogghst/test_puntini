@@ -105,24 +105,22 @@ def plan_step(state: "State", config: Optional[RunnableConfig] = None, runtime: 
     # Initialize logger for this module
     logger = get_logger(__name__)
     
-    # Convert state to dict if needed
+    # Get GoalSpec from state - handle both dict and object access
     if isinstance(state, dict):
-        state_dict = state
+        goal_spec = state.get("goal_spec")
     else:
-        # Convert Pydantic model to dictionary
-        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+        goal_spec = getattr(state, "goal_spec", None)
     
-    # Get parsed goal from artifacts
-    parsed_goal_data = None
-    artifacts = state_dict.get("artifacts", [])
-    for artifact in artifacts:
-        if artifact.type == "parsed_goal":
-            parsed_goal_data = artifact.data
-            break
-    
-    if not parsed_goal_data:
+    if not goal_spec:
         # Fallback to basic planning without parsed goal
         return _create_fallback_plan(state)
+    
+    
+    # Convert GoalSpec to dictionary for compatibility with existing functions
+    if hasattr(goal_spec, 'model_dump'):
+        parsed_goal_data = goal_spec.model_dump()
+    else:
+        parsed_goal_data = goal_spec
     
     try:
         # Get LLM from graph context
@@ -181,10 +179,16 @@ Guidelines:
 - Ensure tool arguments are valid and complete
 - Provide clear reasoning for your choices
 - Be realistic about confidence levels
+- Use the todo list to understand the overall plan and current position
+- Prioritize todos that are marked as "planned" and have no dependencies
+- Consider the step numbers and execution order from the todo list
 
 IMPORTANT: Return a structured StepPlan object, not a tool call. The tool_name should be one of the available tools listed above."""),
             ("human", """Parsed Goal Information:
 {goal_info}
+
+Todo List:
+{todo_list}
 
 Current Progress:
 {progress}
@@ -197,8 +201,17 @@ Plan the next step to move towards achieving this goal.""")
         
         # Prepare context for planning
         goal_info = _format_goal_info(parsed_goal_data)
-        progress = state_dict.get("progress", [])
-        previous_steps = _get_previous_steps(state_dict)
+        
+        # Get state attributes with proper handling
+        if isinstance(state, dict):
+            progress = state.get("progress", [])
+            state_todo_list = state.get("todo_list", [])
+        else:
+            progress = getattr(state, "progress", [])
+            state_todo_list = getattr(state, "todo_list", [])
+        
+        previous_steps = _get_previous_steps(state)
+        todo_list = _format_todo_list_from_state(state_todo_list)
         
         # Create planning chain
         planning_chain = prompt | structured_llm
@@ -206,6 +219,7 @@ Plan the next step to move towards achieving this goal.""")
         # Generate step plan
         step_plan : StepPlan = planning_chain.invoke({
             "goal_info": goal_info,
+            "todo_list": todo_list,
             "progress": "\n".join(progress) if progress else "No progress yet",
             "previous_steps": previous_steps
         })
@@ -216,7 +230,7 @@ Plan the next step to move towards achieving this goal.""")
         return PlanStepResponse(
             current_step="route_tool",
             tool_signature=planned_step,
-            progress=[f"Planned step {step_plan.step_number}: {planned_step['tool_name']}"],
+            progress=[_create_detailed_planning_message(step_plan, planned_step)],
             result=PlanStepResult(
                 status="success",
                 step_plan=step_plan,  # Pass the StepPlan object directly
@@ -287,22 +301,93 @@ def _format_goal_info(parsed_goal_data: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _get_previous_steps(state: dict) -> str:
+def _get_previous_steps(state) -> str:
     """Get information about previous steps from state.
     
     Args:
-        state: Current agent state dictionary.
+        state: Current agent state (dict or object).
         
     Returns:
         String describing previous steps.
     """
-    progress = state.get("progress", [])
+    if isinstance(state, dict):
+        progress = state.get("progress", [])
+    else:
+        progress = getattr(state, "progress", [])
     if not progress:
         return "No previous steps"
     
     # Get last few progress items
     recent_progress = progress[-3:] if len(progress) > 3 else progress
     return "\n".join(recent_progress)
+
+
+def _format_todo_list(parsed_goal_data: Dict[str, Any]) -> str:
+    """Format todo list for LLM planning from parsed goal data.
+    
+    Args:
+        parsed_goal_data: Dictionary containing parsed goal information.
+        
+    Returns:
+        Formatted string with todo list information.
+    """
+    todo_list = parsed_goal_data.get('todo_list', [])
+    if not todo_list:
+        return "No todo list available"
+    
+    lines = []
+    for i, todo in enumerate(todo_list, 1):
+        status = todo.get('status', 'planned')
+        description = todo.get('description', 'Unknown action')
+        step_number = todo.get('step_number', i)
+        tool_name = todo.get('tool_name', 'Not specified')
+        complexity = todo.get('estimated_complexity', 'medium')
+        
+        lines.append(f"{step_number}. {description}")
+        lines.append(f"   Status: {status}")
+        lines.append(f"   Tool: {tool_name}")
+        lines.append(f"   Complexity: {complexity}")
+        lines.append("")  # Empty line between todos
+    
+    return "\n".join(lines)
+
+
+def _format_todo_list_from_state(state_todo_list: List[Any]) -> str:
+    """Format todo list for LLM planning from state.
+    
+    Args:
+        state_todo_list: List of TodoItem objects from state.
+        
+    Returns:
+        Formatted string with todo list information.
+    """
+    if not state_todo_list:
+        return "No todo list available"
+    
+    lines = []
+    for i, todo in enumerate(state_todo_list, 1):
+        # Handle both Pydantic models and dictionaries
+        if hasattr(todo, 'status'):
+            status = todo.status
+            description = todo.description
+            step_number = todo.step_number or i
+            tool_name = todo.tool_name or 'Not specified'
+            complexity = todo.estimated_complexity or 'medium'
+        else:
+            # Handle dictionary format
+            status = todo.get('status', 'planned')
+            description = todo.get('description', 'Unknown action')
+            step_number = todo.get('step_number', i)
+            tool_name = todo.get('tool_name', 'Not specified')
+            complexity = todo.get('estimated_complexity', 'medium')
+        
+        lines.append(f"{step_number}. {description}")
+        lines.append(f"   Status: {status}")
+        lines.append(f"   Tool: {tool_name}")
+        lines.append(f"   Complexity: {complexity}")
+        lines.append("")  # Empty line between todos
+    
+    return "\n".join(lines)
 
 
 def _create_fallback_plan(state: "State") -> PlanStepResponse:
@@ -314,14 +399,11 @@ def _create_fallback_plan(state: "State") -> PlanStepResponse:
     Returns:
         Basic fallback plan.
     """
-    # Convert state to dict if needed
+    # Handle both dict and object access
     if isinstance(state, dict):
-        state_dict = state
+        goal = state.get("goal", "Unknown goal")
     else:
-        # Convert Pydantic model to dictionary
-        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
-    
-    goal = state_dict.get("goal", "Unknown goal")
+        goal = getattr(state, "goal", "Unknown goal")
     
     # Simple fallback planning based on goal text
     planned_step = {
@@ -352,7 +434,7 @@ def _create_fallback_plan(state: "State") -> PlanStepResponse:
     return PlanStepResponse(
         current_step="route_tool",
         tool_signature=planned_step,
-        progress=[f"Fallback planned step: {planned_step['tool_name']}"],
+        progress=[_create_detailed_planning_message(fallback_step_plan, planned_step)],
         result=PlanStepResult(
             status="success",
             step_plan=fallback_step_plan,  # Pass the StepPlan object directly
@@ -360,3 +442,87 @@ def _create_fallback_plan(state: "State") -> PlanStepResponse:
             overall_progress=0.1
         )
     )
+
+
+def _create_detailed_planning_message(step_plan: StepPlan, planned_step: Dict[str, Any]) -> str:
+    """Create a detailed, semantically meaningful planning message.
+    
+    Args:
+        step_plan: The StepPlan object containing planning details.
+        planned_step: The planned step dictionary.
+        
+    Returns:
+        Detailed planning message with context about what will be accomplished.
+    """
+    tool_name = planned_step.get("tool_name", "Unknown")
+    tool_args = planned_step.get("tool_args", {})
+    step_number = step_plan.step_number
+    is_final = step_plan.is_final_step
+    
+    # Create detailed messages based on tool type and arguments
+    if tool_name == "add_node":
+        label = tool_args.get("label", "Unknown")
+        key = tool_args.get("key", "Unknown")
+        properties = tool_args.get("properties", {})
+        
+        # Format properties for display
+        props_str = ""
+        if properties:
+            props_list = [f"{k}: {v}" for k, v in properties.items()]
+            props_str = f" with attributes '{', '.join(props_list)}'"
+        
+        return f"Planned step {step_number}: add_node"
+    
+    elif tool_name == "add_edge":
+        from_node = tool_args.get("from_node", "Unknown")
+        to_node = tool_args.get("to_node", "Unknown")
+        relationship = tool_args.get("relationship", "Unknown")
+        properties = tool_args.get("properties", {})
+        
+        # Format properties for display
+        props_str = ""
+        if properties:
+            props_list = [f"{k}: {v}" for k, v in properties.items()]
+            props_str = f" with attributes '{', '.join(props_list)}'"
+        
+        return f"Planned step {step_number}: add_edge"
+    
+    elif tool_name == "update_props":
+        target_type = tool_args.get("target_type", "Unknown")
+        properties = tool_args.get("properties", {})
+        
+        # Format properties for display
+        props_list = [f"{k}: {v}" for k, v in properties.items()]
+        props_str = f"'{', '.join(props_list)}'"
+        
+        return f"Planned step {step_number}: update_props"
+    
+    elif tool_name == "delete_node":
+        match_spec = tool_args.get("match_spec", {})
+        label = match_spec.get("label", "Unknown")
+        key = match_spec.get("key", "Unknown")
+        
+        return f"Planned step {step_number}: delete_node"
+    
+    elif tool_name == "delete_edge":
+        match_spec = tool_args.get("match_spec", {})
+        relationship = match_spec.get("relationship_type", "Unknown")
+        
+        return f"Planned step {step_number}: delete_edge"
+    
+    elif tool_name == "query_graph":
+        query = tool_args.get("query", "Unknown")
+        limit = tool_args.get("limit", "unlimited")
+        
+        return f"Planned step {step_number}: query_graph"
+    
+    elif tool_name == "cypher_query":
+        query = tool_args.get("query", "Unknown")
+        limit = tool_args.get("limit", "unlimited")
+        
+        return f"Planned step {step_number}: cypher_query"
+    
+    else:
+        # Fallback to generic message
+        final_indicator = " (final step)" if is_final else ""
+        return f"Planned step {step_number}: {tool_name}{final_indicator}"

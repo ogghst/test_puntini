@@ -51,7 +51,7 @@ def route_tool(
         ValidationError: If tool signature is invalid.
         NotFoundError: If specified tool is not available.
     """
-    # Handle both dict and object state
+    # Access state attributes - handle both dict and object access
     if isinstance(state, dict):
         tool_signature = state.get("tool_signature") or {}
     else:

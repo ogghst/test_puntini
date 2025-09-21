@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from typing_extensions import TypedDict, Annotated
 from operator import add
 
+from ..models.goal_schemas import TodoItem, GoalSpec
 from ..nodes.message import (
     Artifact, Failure, ErrorContext, EscalateContext,
     ParseGoalResponse, PlanStepResponse, RouteToolResponse, 
@@ -27,8 +28,10 @@ class State(TypedDict):
     
     # Core goal and planning
     goal: str  # The user's goal or request
+    goal_spec: Optional[GoalSpec]  # Parsed goal specification
     plan: Annotated[List[str], add]  # Execution plan steps (append-only)
     progress: Annotated[List[str], add]  # Progress messages (append-only)
+    todo_list: List[TodoItem]  # List of todos for goal execution
     
     # Error handling and retry management
     failures: Annotated[List[Failure], add]  # List of failures (append-only)

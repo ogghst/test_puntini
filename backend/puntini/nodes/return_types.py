@@ -59,6 +59,14 @@ class ParseGoalReturn(NodeReturnBase):
             "current_attempt": self.current_attempt,
             "parse_goal_response": self.parse_goal_response
         })
+        
+        # Include todo_list and goal_spec from the response if available
+        if self.parse_goal_response:
+            if hasattr(self.parse_goal_response, 'todo_list'):
+                base_update["todo_list"] = self.parse_goal_response.todo_list
+            if hasattr(self.parse_goal_response, 'goal_spec'):
+                base_update["goal_spec"] = self.parse_goal_response.goal_spec
+        
         return base_update
 
 
@@ -75,6 +83,10 @@ class PlanStepReturn(NodeReturnBase):
             "plan_step_response": self.plan_step_response,
             "tool_signature": self.tool_signature
         })
+        
+        # Preserve todo_list from state (plan_step doesn't modify it)
+        # Note: This will be handled by LangGraph state preservation
+        
         return base_update
 
 

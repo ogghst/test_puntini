@@ -194,11 +194,40 @@ def add_edge(
         runtime = get_runtime()
         graph_store: GraphStore = runtime.context['graph_store']
         
-        # Create edge specification
+        # Look up source and target nodes to get their labels
+        # We need to find nodes by their keys to get the labels
+        source_node = None
+        target_node = None
+        
+        # Get all nodes to find the source and target
+        all_nodes = graph_store.get_all_nodes()
+        for node in all_nodes:
+            if node.key == from_node:
+                source_node = node
+            elif node.key == to_node:
+                target_node = node
+        
+        if not source_node:
+            return AddEdgeOutput(
+                status="error",
+                error=f"Source node with key '{from_node}' not found",
+                edge=None
+            )
+        
+        if not target_node:
+            return AddEdgeOutput(
+                status="error",
+                error=f"Target node with key '{to_node}' not found",
+                edge=None
+            )
+        
+        # Create edge specification with correct field names
         edge_spec = EdgeSpec(
-            from_key=from_node,
-            to_key=to_node,
-            relationship=relationship,
+            relationship_type=relationship,
+            source_key=from_node,
+            target_key=to_node,
+            source_label=source_node.label,
+            target_label=target_node.label,
             properties=properties or {}
         )
         
@@ -210,9 +239,9 @@ def add_edge(
             message=f"Successfully created {relationship} edge from '{from_node}' to '{to_node}'",
             edge=EdgeInfo(
                 id=str(edge.id),
-                from_key=edge.from_key,
-                to_key=edge.to_key,
-                relationship=edge.relationship,
+                from_key=edge.source_key,
+                to_key=edge.target_key,
+                relationship=edge.relationship_type,
                 properties=edge.properties
             )
         )

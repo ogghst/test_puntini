@@ -35,15 +35,11 @@ def escalate(
         Escalation should provide clear context and options
         for human decision-making and enable deterministic resume.
     """
-    # Convert state to dict if needed
-    if isinstance(state, dict):
-        state_dict = state
-    else:
-        # Convert Pydantic model to dictionary
-        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
-    
     # Get error context for escalation
-    error_context = state_dict.get("error_context")
+    if isinstance(state, dict):
+        error_context = state.get("error_context")
+    else:
+        error_context = getattr(state, "error_context", None)
     error_message = "Unknown error occurred"
     
     if error_context:

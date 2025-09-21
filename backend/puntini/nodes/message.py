@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from datetime import datetime
 
+from ..models.goal_schemas import TodoItem, GoalSpec
+
 if TYPE_CHECKING:
     from .plan_step import StepPlan, ToolSignature
 
@@ -104,6 +106,8 @@ class ParseGoalResponse(BaseResponse):
     current_attempt: int = Field(description="Current attempt number")
     failures: List[Failure] = Field(default_factory=list, description="Failures that occurred")
     result: ParseGoalResult = Field(description="Execution result")
+    goal_spec: Optional[GoalSpec] = Field(default=None, description="Parsed goal specification")
+    todo_list: List[TodoItem] = Field(default_factory=list, description="List of todos for goal execution")
 
 
 class PlanStepResult(PlanningResult):
@@ -148,6 +152,7 @@ class EvaluateResult(EvaluationResult):
 class EvaluateResponse(BaseResponse):
     """Complete response from evaluate node."""
     result: EvaluateResult = Field(description="Evaluation result")
+    todo_list: List[TodoItem] = Field(default_factory=list, description="Updated todo list")
 
 
 class DiagnoseResult(DiagnosisResult):

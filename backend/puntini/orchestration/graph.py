@@ -382,7 +382,8 @@ def evaluate(state: State, config: Optional[RunnableConfig] = None, runtime: Opt
         "failures": response.failures,
         "result": response.result.model_dump() if response.result else None,
         "evaluate_response": response,
-        "retry_count": response.result.retry_count if response.result else state_dict.get("retry_count", 0)
+        "retry_count": response.result.retry_count if response.result else state_dict.get("retry_count", 0),
+        "todo_list": response.todo_list  # Include updated todo list
     }
     
     # Return Command for atomic update+goto semantics
@@ -469,11 +470,12 @@ def escalate(state: State, config: Optional[RunnableConfig] = None, runtime: Opt
         "failures": response.failures,
         "result": response.result.model_dump() if response.result else None,
         "escalate_response": response,
-        "escalation_context": response.escalation_context
+        "escalation_context": response.escalation_context,
+        "todo_list": state_dict.get("todo_list", [])  # Preserve current todo list
     }
     
     # Interrupt for human input (human-in-the-loop)
-    interrupt("escalation", response.escalation_context)
+    interrupt(response.escalation_context)
     
     # Return Command for atomic update+goto semantics
     return Command(

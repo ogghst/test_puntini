@@ -35,20 +35,16 @@ def diagnose(
         Diagnosis should classify errors as identical, random, or
         systematic to determine the appropriate retry strategy.
     """
-    # Convert state to dict if needed
-    if isinstance(state, dict):
-        state_dict = state
-    else:
-        # Convert Pydantic model to dictionary
-        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
-    
     # Get error information
-    result = state_dict.get("result", {})
+    if isinstance(state, dict):
+        result = state.get("result", {})
+        error_context = state.get("error_context")
+    else:
+        result = getattr(state, "result", {})
+        error_context = getattr(state, "error_context", None)
+    
     error = result.get("error", "Unknown error") if result else "Unknown error"
     error_type = result.get("error_type", "unknown") if result else "unknown"
-    
-    # Get error context if available
-    error_context = state_dict.get("error_context")
     if error_context and isinstance(error_context, dict):
         error_type = error_context.get("type", error_type)
         error = error_context.get("message", error)

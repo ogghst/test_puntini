@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from ..orchestration.state_schema import State
 from ..logging import get_logger
 from ..models.errors import ValidationError, AgentError
+from ..models.goal_schemas import TodoStatus
 from .message import CallToolResponse
 from .message import EvaluateResponse, EvaluateResult, Failure, Artifact, ErrorContext
 
@@ -59,17 +60,13 @@ def evaluate(
     # Initialize logger
     logger = get_logger(__name__)
     
-    # Convert state to dict if needed
-    if isinstance(state, dict):
-        state_dict = state
-    else:
-        # Convert Pydantic model to dictionary
-        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
-        
-    logger.info(f"Evaluating state: {state_dict}")
+    logger.info(f"Evaluating state: {state}")
     
     # Get current step result from call_tool_response
-    call_tool_response : CallToolResponse = state_dict.get("call_tool_response")
+    if isinstance(state, dict):
+        call_tool_response : CallToolResponse = state.get("call_tool_response")
+    else:
+        call_tool_response : CallToolResponse = getattr(state, "call_tool_response", None)
     if not call_tool_response:
         error_msg = "No call_tool_response found in state for evaluation"
         logger.error(error_msg)
@@ -79,8 +76,8 @@ def evaluate(
                 status="error",
                 error=error_msg,
                 error_type="validation_error",
-                retry_count=state_dict.get("retry_count", 0),
-                max_retries=state_dict.get("max_retries", 3),
+                retry_count=state.get("retry_count", 0) if isinstance(state, dict) else getattr(state, "retry_count", 0),
+                max_retries=state.get("max_retries", 3) if isinstance(state, dict) else getattr(state, "max_retries", 3),
                 evaluation_timestamp=datetime.utcnow().isoformat(),
                 decision_reason="Missing call_tool_response for evaluation"
             ),
@@ -100,8 +97,12 @@ def evaluate(
     error_type = result.error_type
     
     # Get current retry information
-    retry_count = state_dict.get("retry_count", 0)
-    max_retries = state_dict.get("max_retries", 3)
+    if isinstance(state, dict):
+        retry_count = state.get("retry_count", 0)
+        max_retries = state.get("max_retries", 3)
+    else:
+        retry_count = getattr(state, "retry_count", 0)
+        max_retries = getattr(state, "max_retries", 3)
     
     logger.info(f"Evaluating step result: {execution_status} for tool '{tool_name}' (retry {retry_count}/{max_retries})")
     
@@ -112,11 +113,11 @@ def evaluate(
                 runtime = get_runtime()
             except Exception as e:
                 logger.error(f"Failed to get runtime context: {e}")
-                return _fallback_evaluation(state_dict, result, retry_count, max_retries, f"Runtime error: {e}")
+                return _fallback_evaluation(state, result, retry_count, max_retries, f"Runtime error: {e}")
         
         if not hasattr(runtime, 'context') or 'llm' not in runtime.context:
             logger.warning("LLM not available in runtime context, using fallback evaluation")
-            return _fallback_evaluation(state_dict, result, retry_count, max_retries)
+            return _fallback_evaluation(state, result, retry_count, max_retries)
         
         llm: BaseChatModel = runtime.context['llm']
         
@@ -180,9 +181,13 @@ Evaluate this result and determine the next action.""")
         ])
         
         # Prepare evaluation context
-        goal = state_dict.get("goal", "Unknown goal")
-        progress = state_dict.get("progress", [])
-        recent_failures = _get_recent_failures(state_dict)
+        if isinstance(state, dict):
+            goal = state.get("goal", "Unknown goal")
+            progress = state.get("progress", [])
+        else:
+            goal = getattr(state, "goal", "Unknown goal")
+            progress = getattr(state, "progress", [])
+        recent_failures = _get_recent_failures(state)
         
         # Create evaluation chain
         evaluation_chain = prompt | structured_llm
@@ -200,6 +205,19 @@ Evaluate this result and determine the next action.""")
             "progress": "\n".join(progress[-3:]) if progress else "No progress yet",
             "recent_failures": recent_failures
         })
+        
+        # Update todo list if step was successful
+        updated_todos = []
+        todo_updated_description = None
+        if evaluation_decision.decision == "advance" and execution_status == "success":
+            # Mark corresponding todo as done in state
+            todo_updated_description = _mark_todo_done_in_state(state, tool_name, result)
+            if todo_updated_description:
+                # Get updated todo list from state
+                if isinstance(state, dict):
+                    updated_todos = state.get("todo_list", [])
+                else:
+                    updated_todos = getattr(state, "todo_list", [])
         
         # Create evaluation result
         evaluation_result = EvaluateResult(
@@ -224,23 +242,45 @@ Evaluate this result and determine the next action.""")
         else:  # escalate
             next_step = "escalate"
         
-        # Create evaluation response
+        # Create evaluation response with updated artifacts
+        artifacts = [Artifact(
+            type="evaluation_decision",
+            data={
+                "decision": evaluation_decision.decision,
+                "confidence": evaluation_decision.confidence,
+                "reasoning": evaluation_decision.reasoning,
+                "goal_progress": evaluation_decision.goal_progress,
+                "should_retry": evaluation_decision.should_retry,
+                "retry_reason": evaluation_decision.retry_reason,
+                "next_action_hint": evaluation_decision.next_action_hint
+            }
+        )]
+        
+        # Add todo update artifact if any
+        if todo_updated_description:
+            artifacts.append(Artifact(
+                type="todo_update",
+                data={
+                    "action": "marked_done",
+                    "tool_name": tool_name,
+                    "todo_description": todo_updated_description
+                }
+            ))
+        
+        # Ensure we always pass the current todo list (updated or not)
+        if not updated_todos:
+            # Get current todo list from state if no updates were made
+            if isinstance(state, dict):
+                updated_todos = state.get("todo_list", [])
+            else:
+                updated_todos = getattr(state, "todo_list", [])
+        
         evaluation_response = EvaluateResponse(
             current_step=next_step,
             result=evaluation_result,
             progress=[f"Evaluated step: {evaluation_decision.decision} (confidence: {evaluation_decision.confidence:.2f})"],
-            artifacts=[Artifact(
-                type="evaluation_decision",
-                data={
-                    "decision": evaluation_decision.decision,
-                    "confidence": evaluation_decision.confidence,
-                    "reasoning": evaluation_decision.reasoning,
-                    "goal_progress": evaluation_decision.goal_progress,
-                    "should_retry": evaluation_decision.should_retry,
-                    "retry_reason": evaluation_decision.retry_reason,
-                    "next_action_hint": evaluation_decision.next_action_hint
-                }
-            )]
+            artifacts=artifacts,
+            todo_list=updated_todos  # Include updated todo list in response
         )
         
         # Add failure record if this was a retry
@@ -251,7 +291,10 @@ Evaluate this result and determine the next action.""")
                 attempt=retry_count,
                 error_type=error_type or "unknown"
             )
-            evaluation_response.failures = state_dict.get("failures", []) + [failure]
+            if isinstance(state, dict):
+                evaluation_response.failures = state.get("failures", []) + [failure]
+            else:
+                evaluation_response.failures = getattr(state, "failures", []) + [failure]
         
         logger.info(f"Evaluation complete: {evaluation_decision.decision} -> {next_step}")
         
@@ -262,11 +305,11 @@ Evaluate this result and determine the next action.""")
         logger.error(error_msg)
         
         # Fallback to rule-based evaluation
-        return _fallback_evaluation(state_dict, result, retry_count, max_retries, error_msg)
+        return _fallback_evaluation(state, result, retry_count, max_retries, error_msg)
 
 
 def _fallback_evaluation(
-    state_dict: Dict[str, Any], 
+    state: "State", 
     result: Dict[str, Any], 
     retry_count: int, 
     max_retries: int,
@@ -275,7 +318,7 @@ def _fallback_evaluation(
     """Fallback evaluation using rule-based logic when LLM is unavailable.
     
     Args:
-        state_dict: Current state dictionary.
+        state: Current agent state.
         result: Tool execution result.
         retry_count: Current retry count.
         max_retries: Maximum retry count.
@@ -286,10 +329,18 @@ def _fallback_evaluation(
     """
     logger = get_logger(__name__)
     
-    execution_status = result.get("status", "unknown")
-    error = result.get("error")
-    error_type = result.get("error_type")
-    tool_name = result.get("tool_name", "unknown")
+    # Handle both dict and CallToolResult objects
+    if isinstance(result, dict):
+        execution_status = result.get("status", "unknown")
+        error = result.get("error")
+        error_type = result.get("error_type")
+        tool_name = result.get("tool_name", "unknown")
+    else:
+        # CallToolResult Pydantic object
+        execution_status = getattr(result, "status", "unknown")
+        error = getattr(result, "error", None)
+        error_type = getattr(result, "error_type", None)
+        tool_name = getattr(result, "tool_name", "unknown")
     
     # Rule-based evaluation logic
     if execution_status == "success":
@@ -362,23 +413,171 @@ def _fallback_evaluation(
             attempt=retry_count,
             error_type=error_type or "unknown"
         )
-        evaluation_response.failures = state_dict.get("failures", []) + [failure]
+        if isinstance(state, dict):
+            evaluation_response.failures = state.get("failures", []) + [failure]
+        else:
+            evaluation_response.failures = getattr(state, "failures", []) + [failure]
     
     logger.info(f"Fallback evaluation: {decision} -> {next_step}")
     
     return evaluation_response
 
 
-def _get_recent_failures(state_dict: Dict[str, Any]) -> str:
-    """Get recent failures for evaluation context.
+def _mark_todo_done_in_state(state: "State", tool_name: str, result: Dict[str, Any]) -> Optional[str]:
+    """Mark a todo item as done in the state's todo list.
+    
+    Args:
+        state: Current agent state.
+        tool_name: Name of the tool that was executed.
+        result: Result from the tool execution.
+        
+    Returns:
+        Description of the todo that was marked as done, or None if no todo was found.
+    """
+    logger = get_logger(__name__)
+    
+    # Get todo list from state
+    if isinstance(state, dict):
+        todo_list = state.get("todo_list", [])
+    else:
+        todo_list = getattr(state, "todo_list", [])
+    if not todo_list:
+        logger.debug("No todo list found in state for update")
+        return None
+    
+    # Try to match the tool execution to a todo item
+    for todo in todo_list:
+        # Handle both dict and TodoItem objects
+        if isinstance(todo, dict):
+            todo_status = todo.get("status")
+            todo_tool = todo.get("tool_name")
+            todo_description = todo.get("description", "")
+        else:
+            # TodoItem Pydantic object
+            todo_status = todo.status
+            todo_tool = todo.tool_name
+            todo_description = todo.description or ""
+        
+        if todo_status == "planned":  # Only update planned todos
+            # Match by tool name AND description analysis
+            if todo_tool == tool_name and _is_todo_completed_by_tool(todo_description, tool_name, result):
+                
+                # Mark as done
+                if isinstance(todo, dict):
+                    todo["status"] = "done"
+                else:
+                    # TodoItem Pydantic object - need to update in place
+                    todo.status = TodoStatus.DONE
+                logger.info(f"Marked todo as done in state: {todo_description}")
+                return todo_description
+    
+    logger.debug(f"No matching todo found for tool: {tool_name}")
+    return None
+
+
+def _mark_todo_done(state_dict: Dict[str, Any], tool_name: str, result: Dict[str, Any]) -> Optional[str]:
+    """Mark a todo item as done based on successful tool execution.
     
     Args:
         state_dict: Current state dictionary.
+        tool_name: Name of the tool that was executed.
+        result: Result from the tool execution.
+        
+    Returns:
+        Description of the todo that was marked as done, or None if no todo was found.
+    """
+    logger = get_logger(__name__)
+    
+    # Get parsed goal data from artifacts
+    artifacts = state_dict.get("artifacts", [])
+    parsed_goal_data = None
+    for artifact in artifacts:
+        if artifact.get("type") == "parsed_goal":
+            parsed_goal_data = artifact.get("data")
+            break
+    
+    if not parsed_goal_data:
+        logger.debug("No parsed goal data found for todo update")
+        return None
+    
+    todo_list = parsed_goal_data.get("todo_list", [])
+    if not todo_list:
+        logger.debug("No todo list found for update")
+        return None
+    
+    # Try to match the tool execution to a todo item
+    for todo in todo_list:
+        # Handle both dict and TodoItem objects
+        if isinstance(todo, dict):
+            todo_status = todo.get("status")
+            todo_tool = todo.get("tool_name")
+            todo_description = todo.get("description", "")
+        else:
+            # TodoItem Pydantic object
+            todo_status = todo.status
+            todo_tool = todo.tool_name
+            todo_description = todo.description or ""
+        
+        if todo_status == "planned":  # Only update planned todos
+            # Match by tool name AND description analysis
+            if todo_tool == tool_name and _is_todo_completed_by_tool(todo_description, tool_name, result):
+                
+                # Mark as done
+                if isinstance(todo, dict):
+                    todo["status"] = "done"
+                else:
+                    # TodoItem Pydantic object - need to update in place
+                    todo.status = TodoStatus.DONE
+                logger.info(f"Marked todo as done: {todo_description}")
+                return todo_description
+    
+    logger.debug(f"No matching todo found for tool: {tool_name}")
+    return None
+
+
+def _is_todo_completed_by_tool(todo_description: str, tool_name: str, result: Dict[str, Any]) -> bool:
+    """Check if a todo item was completed by the given tool execution.
+    
+    Args:
+        todo_description: Description of the todo item.
+        tool_name: Name of the tool that was executed.
+        result: Result from the tool execution.
+        
+    Returns:
+        True if the todo was likely completed by this tool execution.
+    """
+    # Simple heuristic matching based on tool name and todo description
+    todo_lower = todo_description.lower()
+    
+    if tool_name == "add_node":
+        return any(keyword in todo_lower for keyword in ["create", "add", "node", "entity"])
+    elif tool_name == "add_edge":
+        return any(keyword in todo_lower for keyword in ["connect", "link", "relationship", "edge", "between"])
+    elif tool_name == "update_props":
+        return any(keyword in todo_lower for keyword in ["update", "modify", "change", "property", "attribute"])
+    elif tool_name == "delete_node":
+        return any(keyword in todo_lower for keyword in ["delete", "remove", "node", "entity"])
+    elif tool_name == "delete_edge":
+        return any(keyword in todo_lower for keyword in ["delete", "remove", "relationship", "edge"])
+    elif tool_name in ["query_graph", "cypher_query"]:
+        return any(keyword in todo_lower for keyword in ["query", "search", "find", "get", "retrieve"])
+    
+    return False
+
+
+def _get_recent_failures(state: "State") -> str:
+    """Get recent failures for evaluation context.
+    
+    Args:
+        state: Current agent state.
         
     Returns:
         Formatted string of recent failures.
     """
-    failures = state_dict.get("failures", [])
+    if isinstance(state, dict):
+        failures = state.get("failures", [])
+    else:
+        failures = getattr(state, "failures", [])
     if not failures:
         return "No recent failures"
     

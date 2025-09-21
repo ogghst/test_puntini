@@ -61,6 +61,26 @@ class DomainHint(BaseModel):
     relevance: float = Field(ge=0.0, le=1.0, description="Relevance score for the domain hint")
 
 
+class TodoStatus(str, Enum):
+    """Enumeration of todo item statuses."""
+    PLANNED = "planned"
+    DONE = "done"
+
+
+class TodoItem(BaseModel):
+    """Specification for a todo item in the goal execution plan.
+    
+    Represents a specific action that needs to be taken to complete
+    the goal, with tracking of its completion status.
+    """
+    description: str = Field(description="Human-readable description of the action to be taken")
+    status: TodoStatus = Field(default=TodoStatus.PLANNED, description="Current status of the todo item")
+    step_number: Optional[int] = Field(default=None, description="Order in which this todo should be executed")
+    dependencies: List[str] = Field(default_factory=list, description="IDs or descriptions of other todos this depends on")
+    tool_name: Optional[str] = Field(default=None, description="Tool that will be used to complete this todo")
+    estimated_complexity: str = Field(default="medium", description="Estimated complexity: low, medium, high")
+
+
 class GoalSpec(BaseModel):
     """Complete specification for a parsed goal.
     
@@ -76,6 +96,7 @@ class GoalSpec(BaseModel):
     entities: List[EntitySpec] = Field(default_factory=list, description="Entities involved in the goal")
     constraints: List[ConstraintSpec] = Field(default_factory=list, description="Constraints that must be satisfied")
     domain_hints: List[DomainHint] = Field(default_factory=list, description="Domain-specific hints and context")
+    todo_list: List[TodoItem] = Field(default_factory=list, description="List of actions to be taken to complete the goal")
     
     # Execution metadata
     estimated_steps: int = Field(ge=1, default=1, description="Estimated number of steps to complete the goal")
@@ -173,3 +194,56 @@ class GoalSpec(BaseModel):
             entity.type in [EntityType.NODE, EntityType.EDGE]
             for entity in self.entities
         )
+
+    def get_todo_by_description(self, description: str) -> Optional[TodoItem]:
+        """Get a todo item by its description.
+        
+        Args:
+            description: The description of the todo to find.
+            
+        Returns:
+            The TodoItem if found, None otherwise.
+        """
+        for todo in self.todo_list:
+            if todo.description == description:
+                return todo
+        return None
+
+    def mark_todo_done(self, description: str) -> bool:
+        """Mark a todo item as done.
+        
+        Args:
+            description: The description of the todo to mark as done.
+            
+        Returns:
+            True if the todo was found and marked, False otherwise.
+        """
+        todo = self.get_todo_by_description(description)
+        if todo:
+            todo.status = TodoStatus.DONE
+            return True
+        return False
+
+    def get_remaining_todos(self) -> List[TodoItem]:
+        """Get all todos that are not yet done.
+        
+        Returns:
+            List of TodoItem instances with status 'planned'.
+        """
+        return [todo for todo in self.todo_list if todo.status == TodoStatus.PLANNED]
+
+    def get_completed_todos(self) -> List[TodoItem]:
+        """Get all todos that are done.
+        
+        Returns:
+            List of TodoItem instances with status 'done'.
+        """
+        return [todo for todo in self.todo_list if todo.status == TodoStatus.DONE]
+
+    def is_goal_complete(self) -> bool:
+        """Check if all todos are completed.
+        
+        Returns:
+            True if all todos are done, False otherwise.
+        """
+        return len(self.get_remaining_todos()) == 0

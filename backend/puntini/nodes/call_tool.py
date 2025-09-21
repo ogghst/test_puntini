@@ -52,7 +52,7 @@ def call_tool(
         ValidationError: If tool arguments are invalid.
         NotFoundError: If tool is not available.
     """
-    # Handle both dict and object state
+    # Access state attributes - handle both dict and object access
     if isinstance(state, dict):
         tool_signature = state.get("tool_signature") or {}
     else:
@@ -145,7 +145,7 @@ def call_tool(
         return CallToolResponse(
             current_step="evaluate",
             result=normalized_result,
-            progress=[f"Successfully executed tool: {tool_name}"],
+            progress=[_create_detailed_progress_message(tool_name, tool_args, normalized_result)],
             artifacts=[Artifact(
                 type="tool_execution",
                 data={
@@ -337,3 +337,88 @@ def _summarize_result(result: CallToolResult) -> str:
         return f"Tool '{tool_name}' returned {count} items in {execution_time:.3f}s"
     else:
         return f"Tool '{tool_name}' completed in {execution_time:.3f}s"
+
+
+def _create_detailed_progress_message(tool_name: str, tool_args: Dict[str, Any], result: CallToolResult) -> str:
+    """Create a detailed, semantically meaningful progress message.
+    
+    Args:
+        tool_name: Name of the tool that was executed.
+        tool_args: Arguments passed to the tool.
+        result: Result of the tool execution.
+        
+    Returns:
+        Detailed progress message with context about what was accomplished.
+    """
+    if result.status != "success":
+        return f"Failed to execute {tool_name}: {result.error or 'Unknown error'}"
+    
+    result_type = result.result_type or "unknown"
+    execution_time = result.execution_time or 0.0
+    
+    # Create detailed messages based on tool type and result
+    if result_type == "add_node":
+        label = tool_args.get("label", "Unknown")
+        key = tool_args.get("key", "Unknown")
+        properties = tool_args.get("properties", {})
+        
+        # Format properties for display
+        props_str = ""
+        #if properties:
+        #    props_list = [f"{k}: {v}" for k, v in properties.items()]
+        #    props_str = f" with attributes '{', '.join(props_list)}'"
+        
+        return f"Successfully added {label} node '{key}'{props_str}"
+    
+    elif result_type == "add_edge":
+        from_node = tool_args.get("from_node", "Unknown")
+        to_node = tool_args.get("to_node", "Unknown")
+        relationship = tool_args.get("relationship", "Unknown")
+        properties = tool_args.get("properties", {})
+        
+        # Format properties for display
+        props_str = ""
+        #if properties:
+        #    props_list = [f"{k}: {v}" for k, v in properties.items()]
+        #    props_str = f" with attributes '{', '.join(props_list)}'"
+        
+        return f"Successfully created {relationship} relationship from '{from_node}' to '{to_node}'{props_str}"
+    
+    elif result_type == "update_props":
+        target_type = tool_args.get("target_type", "Unknown")
+        properties = tool_args.get("properties", {})
+        
+        # Format properties for display
+        props_list = [f"{k}: {v}" for k, v in properties.items()]
+        props_str = f"'{', '.join(props_list)}'"
+        
+        return f"Successfully updated {target_type} properties: {props_str}"
+    
+    elif result_type == "delete_node":
+        match_spec = tool_args.get("match_spec", {})
+        label = match_spec.get("label", "Unknown")
+        key = match_spec.get("key", "Unknown")
+        
+        return f"Successfully deleted {label} node '{key}'"
+    
+    elif result_type == "delete_edge":
+        match_spec = tool_args.get("match_spec", {})
+        relationship = match_spec.get("relationship_type", "Unknown")
+        
+        return f"Successfully deleted {relationship} edge"
+    
+    elif result_type == "query_result":
+        count = len(result.result.get("results", [])) if result.result else 0
+        query = tool_args.get("query", "Unknown")
+        
+        return f"Successfully executed query '{query[:50]}{'...' if len(query) > 50 else ''}' - found {count} results"
+    
+    elif result_type == "cypher_query":
+        count = len(result.result.get("results", [])) if result.result else 0
+        query = tool_args.get("query", "Unknown")
+        
+        return f"Successfully executed Cypher query '{query[:50]}{'...' if len(query) > 50 else ''}' - found {count} results"
+    
+    else:
+        # Fallback to generic message with tool name and execution time
+        return f"Successfully executed {tool_name} in {execution_time:.3f}s"

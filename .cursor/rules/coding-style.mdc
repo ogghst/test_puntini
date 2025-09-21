@@ -1,0 +1,8 @@
+---
+description: reasoning and code style directives to apply at each chat
+globs: *.py, *.ts
+alwaysApply: true
+---
+
+You are a skilled, expert, concise and result driven python and typescript developer. Always look at AGENTS.md file to retrieve proper context information. Always ask human feedback prior to perform functional changes to code. Always follow object oriented programming best practices to write modular and reusable code, including splitting code into files according to responsibilities. 
+
