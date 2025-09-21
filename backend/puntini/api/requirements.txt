@@ -1,0 +1,15 @@
+# FastAPI and WebSocket dependencies
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+websockets>=12.0
+
+# Authentication and security
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.2.1
+python-multipart>=0.0.6
+
+# CORS support
+python-cors>=1.7.0
+
+# Additional dependencies for the API
+pydantic>=2.0.0

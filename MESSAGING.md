@@ -2,27 +2,27 @@
 
 ## Overview
 
-This document outlines the architecture for building an AI Assistant application featuring a chat interface and a structured data visualization area (e.g., an object tree) that is dynamically modified by an LLM based on chat prompts. The system supports multi-user sessions, with authentication handled via REST APIs and real-time interactions via WebSockets.
+This document outlines the architecture for building an AI Assistant application featuring a chat interface and a structured data visualization area (e.g., an object graph) that is dynamically modified by an LLM based on chat prompts. The system supports multi-user sessions, with authentication handled via REST APIs and real-time interactions via WebSockets.
 
 ### Key Requirements
-- **Backend**: FastAPI (latest version: 0.115.0 as of September 2025) for REST endpoints (authentication and session setup) and WebSocket endpoints (chat and tree updates).
+- **Backend**: FastAPI (latest version: 0.115.0 as of September 2025) for REST endpoints (authentication and session setup) and WebSocket endpoints (chat and graph updates).
 - **Frontend**: React (latest: 18.3.1), with React Query (latest: 5.51.23) for managing REST data fetching and caching, React Router (latest: 6.26.2) for routing, and shadcn/ui (latest: 0.9.0) for UI components. Assume Vite and Tailwind CSS are pre-configured.
 - **Session Management**: Multi-user support without Redis; use in-memory storage (e.g., Python dictionaries) for tracking active WebSocket connections and session states. This is suitable for single-instance deployments but limits horizontal scaling—consider future migration to external stores if needed.
-- **WebSocket Protocol**: A scalable, flexible JSON-based messaging protocol for real-time communication, supporting types like user prompts, assistant responses, tree updates, reasoning, debug, and errors.
-- **LLM Integration**: Assume an external LLM (e.g., via API like Grok or OpenAI) is integrated in the backend for processing prompts and generating tree modifications.
+- **WebSocket Protocol**: A scalable, flexible JSON-based messaging protocol for real-time communication, supporting types like user prompts, assistant responses, graph updates, reasoning, debug, and errors.
+- **LLM Integration**: Assume an external LLM (e.g., via API like Grok or OpenAI) is integrated in the backend for processing prompts and generating graph modifications.
 - **Assumptions**: Backend and frontend are already set up with basic configurations (e.g., CORS, environment variables). Focus on architectural details and protocol; minimal code snippets provided only for authentication and chat.
 
 ### High-Level Architecture
 - **Backend Structure**:
   - REST API: Handles authentication, token generation, and initial session setup.
-  - WebSocket Server: Manages persistent connections for chat and tree interactions per user session.
-  - In-Memory Storage: Dictionaries to map user IDs to WebSocket connections and session data (e.g., current tree state).
+  - WebSocket Server: Manages persistent connections for chat and graph interactions per user session.
+  - In-Memory Storage: Dictionaries to map user IDs to WebSocket connections and session data (e.g., current graph state).
   - LLM Processor: A module that takes prompts, queries the LLM, and generates responses/updates.
 
 - **Frontend Structure**:
-  - Routes: Login page, main dashboard with chat and tree view.
+  - Routes: Login page, main dashboard with chat and graph view.
   - State Management: React Query for REST queries (e.g., login), local state (useState/useReducer) for WebSocket data.
-  - UI: Split layout (chat on left, tree on right) using shadcn components like Card, Input, Button, and a tree visualization library (e.g., react-d3-tree or react-arborist).
+  - UI: Split layout (chat on left, graph on right) using shadcn components like Card, Input, Button, and a graph visualization library
 
 - **Data Flow**:
   1. User authenticates via REST (/login), receives JWT token.
@@ -40,11 +40,11 @@ This document outlines the architecture for building an AI Assistant application
 
 ### FastAPI Setup
 - Use FastAPI's built-in support for OAuth2/JWT for authentication.
-- WebSocket endpoints: One for chat (/ws/chat) and one for tree updates (/ws/tree), or a unified /ws/session for flexibility.
+- WebSocket endpoints: One for chat (/ws/chat) and one for graph updates (/ws/graph), or a unified /ws/session for flexibility.
 - Dependencies: Install via pip: `fastapi[standard]`, `python-jose[cryptography]`, `passlib[bcrypt]` for secure passwords.
 - In-Memory Session Management:
   - `connected_users: dict[str, WebSocket]` – Maps user_id to active WebSocket.
-  - `sessions: dict[str, dict]` – Maps user_id to session data (e.g., {"tree": json_tree, "chat_history": []}).
+  - `sessions: dict[str, dict]` – Maps user_id to session data (e.g., {"graph": json_graph, "chat_history": []}).
   - Cleanup: On disconnect, remove from dicts; use periodic tasks (e.g., via FastAPI's lifespan) for expired sessions.
 
 ### Authentication (REST)
@@ -122,21 +122,21 @@ async def websocket_chat(websocket: WebSocket, token: str):
 
 ### LLM Integration
 - A separate module (e.g., llm.py) that calls an external API.
-- For tree modifications: Parse LLM output to generate JSON deltas (e.g., {"action": "add", "node": {...}}).
-- Store updated tree in sessions[user_id]["tree"].
+- For graph modifications: Parse LLM output to generate JSON deltas (e.g., {"action": "add", "node": {...}}).
+- Store updated graph in sessions[user_id]["graph"].
 
 ## Frontend Architecture
 
 ### React Setup
-- Use React Router for routes: /login, /dashboard (with chat and tree).
-- React Query: For login mutation and initial data fetch (e.g., load initial tree via REST if needed).
-- shadcn/ui: Components like Tabs for switching views, Textarea for chat input, TreeView for object tree.
+- Use React Router for routes: /login, /dashboard (with chat and graph).
+- React Query: For login mutation and initial data fetch (e.g., load initial graph via REST if needed).
+- shadcn/ui: Components like Tabs for switching views, Textarea for chat input, GraphView for object graph.
 - WebSocket: Native WebSocket API with hooks; handle reconnects with exponential backoff.
-- Layout: Responsive grid (Tailwind): Chat column (40%), Tree column (60%).
+- Layout: Responsive grid (Tailwind): Chat column (40%), graph column (60%).
 
 ### State Management
 - Global: Use Context for auth token and user_id.
-- Local: useReducer for chat history and tree state.
+- Local: useReducer for chat history and graph state.
 - React Query: Mutations for login; queries for any REST data.
 
 ### WebSocket Integration
@@ -156,7 +156,7 @@ This structure is flexible: New types can be added without breaking existing cli
 
 ### Protocol Flow
 1. Client connects: Sends initial {"type": "init_session", "data": {}} after connect.
-2. Server responds: {"type": "session_ready", "data": {"session_id": "uuid", "initial_tree": {...}}}.
+2. Server responds: {"type": "session_ready", "data": {"session_id": "uuid", "initial_graph": {...}}}.
 3. Client sends prompts/updates.
 4. Server pushes responses, updates, reasoning, etc.
 5. Heartbeat: Every 30s, client sends {"type": "ping"}; server responds {"type": "pong"}.
@@ -193,7 +193,7 @@ This structure is flexible: New types can be added without breaking existing cli
       "steps": [
         "Parsing prompt: Identify action 'add' and target 'root'.",
         "Querying LLM for validation.",
-        "Generating tree delta."
+        "Generating graph delta."
       ]
     },
     "session_id": "abc-123"
@@ -212,10 +212,10 @@ This structure is flexible: New types can be added without breaking existing cli
   }
   ```
 
-- **Tree Update**: Pushed after LLM modifies the tree (use deltas for efficiency).
+- **Graph Update**: Pushed after LLM modifies the graph (use deltas for efficiency).
   ```json
   {
-    "type": "tree_update",
+    "type": "graph_update",
     "data": {
       "delta": {
         "action": "add",
@@ -245,13 +245,13 @@ This structure is flexible: New types can be added without breaking existing cli
   ```
 
 - **Other Typical Examples**:
-  - **Init Session**: Client: {"type": "init_session", "data": {}}; Server: {"type": "session_ready", "data": {"initial_tree": {...}}}.
+  - **Init Session**: Client: {"type": "init_session", "data": {}}; Server: {"type": "session_ready", "data": {"initial_graph": {...}}}.
   - **Logout/Close**: Client: {"type": "close_session", "data": {}}; Server closes connection and cleans session.
   - **History Sync**: Server: {"type": "chat_history", "data": {"messages": [{"role": "user", "content": "..."}, ...]}} for loading past chats.
 
 ## Session Management (Multi-User)
 
-- **Creation**: On successful WebSocket connect and init_session, generate session_id (UUID) and store in sessions[user_id] = {"session_id": "...", "tree": {}, "history": []}.
+- **Creation**: On successful WebSocket connect and init_session, generate session_id (UUID) and store in sessions[user_id] = {"session_id": "...", "graph": {}, "history": []}.
 - **Isolation**: All operations keyed by user_id from JWT. No cross-user data leakage.
 - **Persistence**: In-memory only; on disconnect, persist to DB if needed (e.g., via SQLAlchemy integration).
 - **Cleanup**: On WebSocketDisconnect, remove from connected_users; use a timer to expire inactive sessions (e.g., 1 hour).
@@ -267,8 +267,8 @@ This structure is flexible: New types can be added without breaking existing cli
 
 - **Frontend**:
   - Auth Context: Provider to store token after login.
-  - WebSocket Hook: Handle onmessage by dispatching to reducers (e.g., update chat with assistant_response, apply delta with tree_update).
-  - UI: Use shadcn's ScrollArea for chat, Tree for object view.
+  - WebSocket Hook: Handle onmessage by dispatching to reducers (e.g., update chat with assistant_response, apply delta with graph_update).
+  - UI: Use shadcn's ScrollArea for chat, Graph for object view.
   - Error Handling: Display toasts (shadcn Toast) for errors; auto-reconnect WebSocket.
 
 - **Security**:

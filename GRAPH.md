@@ -73,6 +73,198 @@ Here are the detailed responsibilities of each node in the graph, based on their
 *   **Description**: This is the final node in the graph. It synthesizes a final answer for the user, summarizing the work done by the agent. The current implementation is a placeholder.
 *   **Routing**: It routes to the `END` of the graph, completing the execution.
 
+## Data Structures Passed Between States
+
+The agent uses a comprehensive state management system with typed data structures that flow between nodes. This section documents all the key data structures and their fields.
+
+### Core State Schema (`State`)
+
+The main state object that flows through all nodes contains the following fields:
+
+#### Core Goal and Planning
+- **`goal`** (str): The user's original goal or request
+- **`plan`** (List[str]): Execution plan steps
+- **`progress`** (List[str]): Progress messages
+
+#### Error Handling and Retry Management
+- **`failures`** (List[Failure]): List of failures that occurred
+- **`retry_count`** (int): Current retry count (default: 0)
+- **`max_retries`** (int): Maximum retry count (default: 3)
+
+#### Communication and Context
+- **`messages`** (List[Any]): Communication messages
+- **`current_step`** (str): Current execution step (default: "parse_goal")
+- **`current_attempt`** (int): Current attempt number (default: 1)
+
+#### Results and Artifacts
+- **`artifacts`** (List[Artifact]): Artifacts created during execution
+- **`result`** (Optional[Dict[str, Any]]): Current execution result
+
+#### Agent Components (Shared Across All Nodes)
+- **`tool_registry`** (Optional[Any]): Tool registry instance
+- **`graph_store`** (Optional[Any]): Graph store instance
+- **`context_manager`** (Optional[Any]): Context manager instance
+- **`tracer`** (Optional[Any]): Tracer instance
+
+#### Private Channels for Inter-Node Data
+- **`tool_signature`** (Optional[Dict[str, Any]]): Tool signature for execution
+- **`error_context`** (Optional[ErrorContext]): Error context for diagnosis
+- **`escalation_context`** (Optional[EscalateContext]): Escalation context
+
+#### Node Responses for Type Safety
+- **`parse_goal_response`** (Optional[ParseGoalResponse]): Parse goal node response
+- **`plan_step_response`** (Optional[PlanStepResponse]): Plan step node response
+- **`route_tool_response`** (Optional[RouteToolResponse]): Route tool node response
+- **`call_tool_response`** (Optional[CallToolResponse]): Call tool node response
+- **`evaluate_response`** (Optional[EvaluateResponse]): Evaluate node response
+- **`diagnose_response`** (Optional[DiagnoseResponse]): Diagnose node response
+- **`escalate_response`** (Optional[EscalateResponse]): Escalate node response
+- **`answer_response`** (Optional[AnswerResponse]): Answer node response
+
+### Goal Parsing Structures
+
+#### `GoalSpec` - Complete Goal Specification
+- **`original_goal`** (str): The original goal text as provided by the user
+- **`intent`** (str): The primary intent or purpose of the goal
+- **`complexity`** (GoalComplexity): The assessed complexity (SIMPLE, MEDIUM, COMPLEX)
+- **`entities`** (List[EntitySpec]): Entities involved in the goal
+- **`constraints`** (List[ConstraintSpec]): Constraints that must be satisfied
+- **`domain_hints`** (List[DomainHint]): Domain-specific hints and context
+- **`estimated_steps`** (int): Estimated number of steps to complete (default: 1)
+- **`requires_human_input`** (bool): Whether the goal requires human input (default: False)
+- **`priority`** (str): Priority level - low, medium, high, urgent (default: "medium")
+- **`confidence`** (float): Overall confidence in the goal parsing (0.0-1.0)
+- **`parsing_notes`** (List[str]): Notes about the parsing process
+
+#### `EntitySpec` - Entity Specification
+- **`name`** (str): The name or identifier of the entity
+- **`type`** (EntityType): The type of entity (NODE, EDGE, PROPERTY, QUERY, UNKNOWN)
+- **`label`** (Optional[str]): The label or category of the entity
+- **`properties`** (Dict[str, Any]): Properties associated with the entity
+- **`confidence`** (float): Confidence score for entity extraction (0.0-1.0, default: 1.0)
+
+#### `ConstraintSpec` - Constraint Specification
+- **`type`** (str): The type of constraint (e.g., 'uniqueness', 'relationship', 'property')
+- **`description`** (str): Human-readable description of the constraint
+- **`applies_to`** (Optional[str]): What the constraint applies to (entity name or type)
+- **`severity`** (str): Severity level - low, medium, high (default: "medium")
+
+#### `DomainHint` - Domain Hint Specification
+- **`domain`** (str): The domain or context (e.g., 'project_management', 'social_network')
+- **`hint`** (str): The specific hint or insight
+- **`relevance`** (float): Relevance score for the domain hint (0.0-1.0)
+
+### Planning Structures
+
+#### `StepPlan` - Step Planning Output
+- **`step_number`** (int): The step number in the overall plan
+- **`tool_signature`** (ToolSignature): The tool signature for this step
+- **`is_final_step`** (bool): Whether this is the final step in the plan
+- **`next_step_hint`** (str): Hint for the next step if not final
+- **`overall_progress`** (float): Overall progress towards goal completion (0.0-1.0)
+
+#### `ToolSignature` - Tool Signature Schema
+- **`tool_name`** (str): The name of the tool to execute
+- **`tool_args`** (Dict[str, Any]): Arguments for the tool
+- **`reasoning`** (str): Reasoning for choosing this tool and arguments
+- **`confidence`** (float): Confidence score for this plan (0.0-1.0)
+- **`expected_outcome`** (str): Expected outcome of executing this tool
+
+### Message and Response Structures
+
+#### `Artifact` - Execution Artifact
+- **`type`** (str): Type of artifact (e.g., 'parsed_goal', 'tool_execution')
+- **`data`** (Dict[str, Any]): Artifact data
+
+#### `Failure` - Execution Failure
+- **`step`** (str): The step where the failure occurred
+- **`error`** (str): Error message
+- **`attempt`** (int): Attempt number when failure occurred
+- **`error_type`** (str): Type of error (e.g., 'validation_error', 'network_error')
+- **`timestamp`** (Optional[datetime]): When the failure occurred (default: current time)
+
+#### `ErrorContext` - Error Context
+- **`type`** (str): Type of error context
+- **`message`** (str): Error message
+- **`details`** (Dict[str, Any]): Additional error details
+
+#### `EscalateContext` - Escalation Context
+- **`reason`** (str): Reason for escalation
+- **`error`** (str): Error that triggered escalation
+- **`options`** (List[str]): Available options for human
+- **`recommended_action`** (str): Recommended action
+
+### Node Response Structures
+
+#### `ParseGoalResponse` - Parse Goal Node Response
+- **`current_step`** (str): Next step to execute
+- **`progress`** (List[str]): Progress messages
+- **`artifacts`** (List[Artifact]): Artifacts created during execution
+- **`failures`** (List[Failure]): Failures that occurred
+- **`result`** (ParseGoalResult): Execution result
+- **`current_attempt`** (int): Current attempt number
+
+#### `PlanStepResponse` - Plan Step Node Response
+- **`current_step`** (str): Next step to execute
+- **`progress`** (List[str]): Progress messages
+- **`artifacts`** (List[Artifact]): Artifacts created during execution
+- **`failures`** (List[Failure]): Failures that occurred
+- **`result`** (PlanStepResult): Execution result
+- **`tool_signature`** (Optional[Dict[str, Any]]): Tool signature for execution
+
+#### `CallToolResponse` - Call Tool Node Response
+- **`current_step`** (str): Next step to execute
+- **`progress`** (List[str]): Progress messages
+- **`artifacts`** (List[Artifact]): Artifacts created during execution
+- **`failures`** (List[Failure]): Failures that occurred
+- **`result`** (CallToolResult): Tool execution result
+
+#### `EvaluateResponse` - Evaluate Node Response
+- **`current_step`** (str): Next step to execute
+- **`progress`** (List[str]): Progress messages
+- **`artifacts`** (List[Artifact]): Artifacts created during execution
+- **`failures`** (List[Failure]): Failures that occurred
+- **`result`** (EvaluateResult): Evaluation result
+
+### Result Structures
+
+#### `ParseGoalResult` - Parse Goal Execution Result
+- **`status`** (str): Execution status - 'success' or 'error'
+- **`error`** (Optional[str]): Error message if status is 'error'
+- **`error_type`** (Optional[str]): Type of error if status is 'error'
+- **`parsed_goal`** (Optional[Dict[str, Any]]): Parsed goal data
+- **`complexity`** (Optional[str]): Goal complexity level
+- **`requires_graph_ops`** (Optional[bool]): Whether goal requires graph operations
+- **`is_simple`** (Optional[bool]): Whether goal is simple
+- **`retryable`** (Optional[bool]): Whether error is retryable
+
+#### `CallToolResult` - Tool Execution Result
+- **`status`** (str): Execution status - 'success' or 'error'
+- **`error`** (Optional[str]): Error message if status is 'error'
+- **`error_type`** (Optional[str]): Type of error if status is 'error'
+- **`execution_time`** (Optional[float]): Execution time in seconds
+- **`tool_name`** (Optional[str]): Name of executed tool
+- **`result`** (Optional[Dict[str, Any]]): Tool execution result
+- **`result_type`** (Optional[str]): Type of result returned
+
+#### `EvaluateResult` - Evaluation Result
+- **`status`** (str): Execution status - 'success' or 'error'
+- **`error`** (Optional[str]): Error message if status is 'error'
+- **`error_type`** (Optional[str]): Type of error if status is 'error'
+- **`retry_count`** (int): Current retry count
+- **`max_retries`** (int): Maximum retry count
+- **`evaluation_timestamp`** (str): When evaluation occurred
+- **`decision_reason`** (str): Reason for decision
+- **`goal_complete`** (Optional[bool]): Whether goal is complete
+- **`next_action`** (Optional[str]): Next action to take
+
+### Command Structures
+
+#### `CommandReturn` - Command Return Base
+- **`update`** (Optional[Dict[str, Any]]): State updates
+- **`goto`** (Optional[str]): Next node to execute
+- **`resume`** (Optional[str]): Resume value for human-in-the-loop
+
 ## Available Tools
 
 The `plan_step` node is aware of the following tools that can be used to manipulate the graph:
