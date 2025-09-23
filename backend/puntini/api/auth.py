@@ -14,6 +14,7 @@ from jose import JWTError, jwt
 import bcrypt
 
 from ..utils.settings import Settings
+from ..logging import get_logger
 
 
 class AuthManager:
@@ -35,6 +36,7 @@ class AuthManager:
         
         # Security scheme
         self.security = HTTPBearer()
+        self.logger = get_logger(__name__)
         
         # In-memory user storage (replace with real database in production)
         self.fake_users_db: Dict[str, Dict[str, str]] = {
@@ -45,6 +47,7 @@ class AuthManager:
                 "full_name": "Test User"
             }
         }
+        self.logger.info("AuthManager initialized with test user")
     
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """Verify a password against its hash.
@@ -93,9 +96,12 @@ class AuthManager:
         """
         user = self.fake_users_db.get(username)
         if not user:
+            self.logger.warning(f"Authentication failed: user '{username}' not found")
             return None
         if not self.verify_password(password, user["hashed_password"]):
+            self.logger.warning(f"Authentication failed: invalid password for user '{username}'")
             return None
+        self.logger.info(f"Authentication successful for user: {username}")
         return user
     
     def create_access_token(self, data: Dict[str, str]) -> str:
@@ -158,6 +164,7 @@ class AuthManager:
             ValueError: If username already exists.
         """
         if username in self.fake_users_db:
+            self.logger.warning(f"User creation failed: user '{username}' already exists")
             raise ValueError("Username already exists")
         
         hashed_password = self.get_password_hash(password)
@@ -168,6 +175,7 @@ class AuthManager:
             "full_name": full_name
         }
         self.fake_users_db[username] = user_data
+        self.logger.info(f"User created successfully: {username}")
         return user_data
 
 

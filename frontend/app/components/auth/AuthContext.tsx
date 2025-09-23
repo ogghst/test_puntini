@@ -1,8 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { SessionAPI } from "@/utils/session";
-
-// Base API configuration
-const API_BASE_URL = "http://localhost:8009";
+import { config, getApiUrl } from "@/utils/config";
 
 interface AuthContextType {
   user: { username: string; email: string; full_name: string } | null;
@@ -25,8 +23,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Check if user is already logged in on initial load
   useEffect(() => {
-    const storedToken = localStorage.getItem("authToken");
-    const storedUser = localStorage.getItem("authUser");
+    const authConfig = config.getAuthConfig();
+    const storedToken = localStorage.getItem(authConfig.tokenStorageKey);
+    const storedUser = localStorage.getItem(authConfig.userStorageKey);
     
     if (storedToken && storedUser) {
       setToken(storedToken);
@@ -43,19 +42,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(result.access_token);
       
       // Get user info from the /me endpoint
-      const userResponse = await fetch(`${API_BASE_URL}/me`, {
+      const userResponse = await fetch(getApiUrl('/me'), {
         headers: {
           "Authorization": `Bearer ${result.access_token}`
         }
       });
+      
+      const authConfig = config.getAuthConfig();
       
       if (userResponse.ok) {
         const userObj = await userResponse.json();
         setUser(userObj);
         
         // Store in localStorage
-        localStorage.setItem("authToken", result.access_token);
-        localStorage.setItem("authUser", JSON.stringify(userObj));
+        localStorage.setItem(authConfig.tokenStorageKey, result.access_token);
+        localStorage.setItem(authConfig.userStorageKey, JSON.stringify(userObj));
       } else {
         // Fallback to mock user if /me fails
         const userObj = {
@@ -66,8 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userObj);
         
         // Store in localStorage
-        localStorage.setItem("authToken", result.access_token);
-        localStorage.setItem("authUser", JSON.stringify(userObj));
+        localStorage.setItem(authConfig.tokenStorageKey, result.access_token);
+        localStorage.setItem(authConfig.userStorageKey, JSON.stringify(userObj));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -86,7 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(result);
       
       // Store in localStorage
-      localStorage.setItem("authUser", JSON.stringify(result));
+      const authConfig = config.getAuthConfig();
+      localStorage.setItem(authConfig.userStorageKey, JSON.stringify(result));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
       throw err;
@@ -98,8 +100,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("authUser");
+    const authConfig = config.getAuthConfig();
+    localStorage.removeItem(authConfig.tokenStorageKey);
+    localStorage.removeItem(authConfig.userStorageKey);
     SessionAPI.disconnectWebSocket();
   };
 

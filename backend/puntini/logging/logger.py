@@ -48,6 +48,19 @@ class LoggingService:
         if self._configured:
             return
             
+        # Clear any existing handlers to prevent duplicates
+        root_logger = logging.getLogger()
+        # Clear all existing handlers
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:
+                pass  # Ignore errors when closing handlers
+        
+        # Reset configured flag to allow reconfiguration
+        self._configured = False
+            
         # Create logs directory if it doesn't exist
         logs_path = Path(self.settings.logging.logs_path)
         try:
@@ -94,43 +107,64 @@ class LoggingService:
         """
         log_file = logs_path / self.settings.logging.log_file
         
-        # Main file handler with rotation
-        file_handler = RotatingFileHandler(
-            str(log_file),
-            maxBytes=self.settings.logging.max_bytes,
-            backupCount=self.settings.logging.backup_count,
-            encoding='utf-8'
-        )
-        file_handler.setLevel(getattr(logging, self.settings.logging.log_level.upper()))
-        file_handler.setFormatter(self._formatters['file'])
+        # Check if file handlers already exist for this file
+        root_logger = logging.getLogger()
+        existing_file_handlers = [
+            h for h in root_logger.handlers 
+            if isinstance(h, RotatingFileHandler) and h.baseFilename == str(log_file)
+        ]
+        
+        if not existing_file_handlers:
+            # Main file handler with rotation
+            file_handler = RotatingFileHandler(
+                str(log_file),
+                maxBytes=self.settings.logging.max_bytes,
+                backupCount=self.settings.logging.backup_count,
+                encoding='utf-8'
+            )
+            file_handler.setLevel(getattr(logging, self.settings.logging.log_level.upper()))
+            file_handler.setFormatter(self._formatters['file'])
+            
+            # Configure root logger
+            root_logger.setLevel(getattr(logging, self.settings.logging.log_level.upper()))
+            root_logger.addHandler(file_handler)
+            
+            self._handlers.append(file_handler)
         
         # Error file handler
         error_file = logs_path / "error.log"
-        error_handler = RotatingFileHandler(
-            str(error_file),
-            maxBytes=self.settings.logging.max_bytes,
-            backupCount=self.settings.logging.backup_count,
-            encoding='utf-8'
-        )
-        error_handler.setLevel(logging.ERROR)
-        error_handler.setFormatter(self._formatters['file'])
+        existing_error_handlers = [
+            h for h in root_logger.handlers 
+            if isinstance(h, RotatingFileHandler) and h.baseFilename == str(error_file)
+        ]
         
-        # Configure root logger
-        root_logger = logging.getLogger()
-        root_logger.setLevel(getattr(logging, self.settings.logging.log_level.upper()))
-        root_logger.addHandler(file_handler)
-        root_logger.addHandler(error_handler)
-        
-        self._handlers.extend([file_handler, error_handler])
+        if not existing_error_handlers:
+            error_handler = RotatingFileHandler(
+                str(error_file),
+                maxBytes=self.settings.logging.max_bytes,
+                backupCount=self.settings.logging.backup_count,
+                encoding='utf-8'
+            )
+            error_handler.setLevel(logging.ERROR)
+            error_handler.setFormatter(self._formatters['file'])
+            
+            root_logger.addHandler(error_handler)
+            
+            self._handlers.append(error_handler)
         
     def _setup_console_handler(self) -> None:
         """Setup console handler for development."""
+        # Check if console handler already exists
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers:
+            if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stderr:
+                return  # Console handler already exists
+        
         console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setLevel(getattr(logging, self.settings.logging.log_level.upper()))
         console_handler.setFormatter(self._formatters['console'])
         
         # Add to root logger
-        root_logger = logging.getLogger()
         root_logger.addHandler(console_handler)
         
         self._handlers.append(console_handler)
@@ -309,8 +343,9 @@ def setup_logging(settings: Optional[Settings] = None) -> LoggingService:
         Configured logging service instance.
     """
     global _logging_service
-    _logging_service = LoggingService(settings)
-    _logging_service.setup()
+    if _logging_service is None:
+        _logging_service = LoggingService(settings)
+        _logging_service.setup()
     return _logging_service
 
 
