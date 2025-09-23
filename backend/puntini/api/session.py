@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 from ..utils.settings import Settings
+from ..logging import get_logger
 
 
 class SessionData:
@@ -183,6 +184,7 @@ class SessionManager:
         self.user_sessions: Dict[str, List[str]] = {}  # user_id -> list of session_ids
         self.session_timeout = timedelta(hours=1)  # 1 hour timeout
         self._cleanup_task: Optional[asyncio.Task] = None
+        self.logger = get_logger(__name__)
     
     def create_session(self, user_id: str) -> SessionData:
         """Create a new session for a user.
@@ -206,6 +208,7 @@ class SessionManager:
             self.user_sessions[user_id] = []
         self.user_sessions[user_id].append(session_id)
         
+        self.logger.info(f"Created new session for user {user_id}: {session_id}")
         return session_data
     
     def get_session(self, session_id: str) -> Optional[SessionData]:
@@ -321,6 +324,7 @@ class SessionManager:
         
         # Remove from sessions
         del self.sessions[session_id]
+        self.logger.info(f"Closed session: {session_id}")
         return True
     
     def cleanup_expired_sessions(self) -> int:
@@ -338,6 +342,9 @@ class SessionManager:
         
         for session_id in expired_sessions:
             self.close_session(session_id)
+        
+        if len(expired_sessions) > 0:
+            self.logger.info(f"Cleaned up {len(expired_sessions)} expired sessions")
         
         return len(expired_sessions)
     
@@ -361,12 +368,10 @@ class SessionManager:
             try:
                 await asyncio.sleep(300)  # Run every 5 minutes
                 cleaned = self.cleanup_expired_sessions()
-                if cleaned > 0:
-                    print(f"Cleaned up {cleaned} expired sessions")
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"Error in cleanup loop: {e}")
+                self.logger.error(f"Error in cleanup loop: {e}")
     
     def get_stats(self) -> Dict[str, Any]:
         """Get session manager statistics.

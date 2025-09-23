@@ -8,9 +8,17 @@ import asyncio
 import json
 from typing import Any, Dict, List, Optional, Set
 from uuid import uuid4
+import uuid
 
 from fastapi import WebSocket, WebSocketDisconnect
+from langfuse.langchain import CallbackHandler
+from langfuse import Langfuse
+from langfuse import get_client
 from langgraph.graph import StateGraph
+
+from ..logging import get_logger
+
+from puntini.utils.settings import settings
 
 from .auth import get_current_user_websocket
 from .models import (
@@ -50,7 +58,8 @@ class WebSocketManager:
         self.session_manager = session_manager
         self.active_connections: Dict[str, WebSocket] = {}  # session_id -> websocket
         self.user_connections: Dict[str, Set[str]] = {}  # user_id -> set of session_ids
-        self.agent = None
+        self.agent: StateGraph = None
+        self.logger = get_logger(__name__)
         self._initialize_agent()
     
     def _initialize_agent(self) -> None:
@@ -70,9 +79,9 @@ class WebSocketManager:
                 tracer=tracer
             )
             
-            print("Agent initialized successfully")
+            self.logger.info("Agent initialized successfully")
         except Exception as e:
-            print(f"Failed to initialize agent: {e}")
+            self.logger.error(f"Failed to initialize agent: {e}")
             self.agent = None
     
     async def connect(self, websocket: WebSocket, token: str) -> Optional[str]:
@@ -88,6 +97,7 @@ class WebSocketManager:
         # Authenticate user
         user_id = await get_current_user_websocket(token)
         if not user_id:
+            self.logger.warning(f"WebSocket connection attempt with invalid token: {token[:10]}...")
             await websocket.close(code=1008, reason="Invalid token")
             return None
         
@@ -106,7 +116,7 @@ class WebSocketManager:
             self.user_connections[user_id] = set()
         self.user_connections[user_id].add(session_id)
         
-        print(f"WebSocket connected: user={user_id}, session={session_id}")
+        self.logger.info(f"WebSocket connected: user={user_id}, session={session_id}")
         return session_id
     
     async def disconnect(self, session_id: str) -> None:
@@ -132,7 +142,7 @@ class WebSocketManager:
             # Close session
             self.session_manager.close_session(session_id)
             
-            print(f"WebSocket disconnected: user={user_id}, session={session_id}")
+            self.logger.info(f"WebSocket disconnected: user={user_id}, session={session_id}")
     
     async def send_message(self, session_id: str, message: Message) -> bool:
         """Send a message to a specific session.
@@ -150,9 +160,10 @@ class WebSocketManager:
         
         try:
             await websocket.send_text(message.model_dump_json())
+            self.logger.debug(f"Message sent to session {session_id}: {message.type} - {message.model_dump_json()}")
             return True
         except Exception as e:
-            print(f"Error sending message to {session_id}: {e}")
+            self.logger.error(f"Error sending message to {session_id}: {e}")
             return False
     
     async def send_to_user(self, user_id: str, message: Message) -> int:
@@ -186,9 +197,10 @@ class WebSocketManager:
         """
         try:
             message = parse_message(message_data)
+            self.logger.debug(f"Processing message for session {session_id}: {message.type}")
             await self._process_message(session_id, message)
         except Exception as e:
-            print(f"Error handling message: {e}")
+            self.logger.error(f"Error handling message for session {session_id}: {e}")
             error_message = Error.create(
                 code=400,
                 message=f"Invalid message format: {str(e)}",
@@ -274,8 +286,10 @@ class WebSocketManager:
         
         # Process with agent if available
         if self.agent:
+            self.logger.info(f"Processing user prompt with agent for session {session_id}")
             await self._process_with_agent(session_id, message)
         else:
+            self.logger.warning(f"Agent not available, sending fallback response for session {session_id}")
             # Fallback response
             response = AssistantResponse.create(
                 text="I'm sorry, the agent is not available at the moment.",
@@ -316,6 +330,11 @@ class WebSocketManager:
             if not all([graph_store, context_manager, tool_registry, tracer]):
                 raise ValueError("Agent components not properly initialized")
             
+            # Create LLM for the graph context (like in CLI)
+            from ..llm.llm_models import LLMFactory
+            llm_factory = LLMFactory()
+            llm = llm_factory.get_default_llm()
+            
             # Create initial state
             initial_state = create_initial_state(
                 goal=message.data.get("prompt", ""),
@@ -325,8 +344,32 @@ class WebSocketManager:
                 tracer=tracer
             )
             
-            # Stream agent execution
-            async for chunk in self.agent.astream(initial_state, stream_mode=["updates", "custom"]):
+            Langfuse(
+                secret_key=settings.langfuse.secret_key,
+                public_key=settings.langfuse.public_key,
+                host=settings.langfuse.host
+            )   
+            langfuse = get_client()
+            langfuse_handler = CallbackHandler()
+            thread_id = str(uuid.uuid4())
+                
+            # Pass LLM and components through context (like in CLI)
+            context = {
+                "llm": llm,
+                "graph_store": graph_store,
+                "context_manager": context_manager,
+                "tool_registry": tool_registry,
+                "tracer": tracer
+            }
+            
+            config = {
+                "configurable": {"thread_id": str(uuid.uuid4())}, 
+                "callbacks": [langfuse_handler],
+                "recursion_limit": 100  # Increase from default 25 to 100
+            }
+            
+            # Stream agent execution with context
+            async for chunk in self.agent.astream(initial_state, stream_mode=["updates", "custom", "events", "messages-tuple"], context=context, config=config):
                 await self._handle_agent_chunk(session_id, chunk)
             
             # Send completion message
@@ -337,7 +380,7 @@ class WebSocketManager:
             await self.send_message(session_id, completion)
             
         except Exception as e:
-            print(f"Error processing with agent: {e}")
+            self.logger.error(f"Error processing with agent for session {session_id}: {e}")
             error_message = Error.create(
                 code=500,
                 message=f"Agent processing error: {str(e)}",
@@ -352,6 +395,9 @@ class WebSocketManager:
             session_id: Session identifier.
             chunk: Agent streaming chunk.
         """
+        
+        self.logger.info(f"Agent chunk: {chunk}")
+        
         try:
             if isinstance(chunk, tuple) and len(chunk) == 2:
                 mode, data = chunk
@@ -367,7 +413,7 @@ class WebSocketManager:
                 await self._handle_single_chunk(session_id, chunk)
                 
         except Exception as e:
-            print(f"Error handling agent chunk: {e}")
+            self.logger.error(f"Error handling agent chunk for session {session_id}: {e}")
     
     async def _handle_state_update(self, session_id: str, data: Dict[str, Any]) -> None:
         """Handle agent state update.

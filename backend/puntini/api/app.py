@@ -20,6 +20,9 @@ from .session import session_manager
 from .websocket import websocket_manager
 from .models import Message, UserPrompt, AssistantResponse, Error
 from ..utils.settings import Settings
+from ..logging import get_logger, setup_logging
+
+from fastapi import WebSocket
 
 
 class LoginRequest(BaseModel):
@@ -60,23 +63,26 @@ class ConnectionStatsResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
+    # Get logger (logging should already be set up in create_app)
+    logger = get_logger(__name__)
+    
     # Startup
-    print("Starting Puntini Agent API...")
+    logger.info("Starting Puntini Agent API...")
     
     # Start session cleanup task
     await session_manager.start_cleanup_task()
     
-    print("API startup complete")
+    logger.info("API startup complete")
     
     yield
     
     # Shutdown
-    print("Shutting down Puntini Agent API...")
+    logger.info("Shutting down Puntini Agent API...")
     
     # Stop session cleanup task
     await session_manager.stop_cleanup_task()
     
-    print("API shutdown complete")
+    logger.info("API shutdown complete")
 
 
 def create_app(settings: Settings = None) -> FastAPI:
@@ -91,8 +97,13 @@ def create_app(settings: Settings = None) -> FastAPI:
     if settings is None:
         settings = Settings()
     
+    # Setup logging only once
+    logging_service = setup_logging(settings)
+    logger = get_logger(__name__)
+    
     # Get server configuration
     server_config = settings.get_server_config()
+    logger.info(f"Creating FastAPI app with server config: {server_config}")
     
     app = FastAPI(
         title="Puntini Agent API",
@@ -118,8 +129,12 @@ def create_app(settings: Settings = None) -> FastAPI:
     @app.post("/login", response_model=LoginResponse)
     async def login(request: LoginRequest):
         """Authenticate user and return JWT token."""
+        auth_logger = get_logger("puntini.api.auth")
+        auth_logger.info(f"Login attempt for user: {request.username}")
+        
         user = auth_manager.authenticate_user(request.username, request.password)
         if not user:
+            auth_logger.warning(f"Failed login attempt for user: {request.username}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials",
@@ -127,6 +142,8 @@ def create_app(settings: Settings = None) -> FastAPI:
             )
         
         access_token = auth_manager.create_access_token(data={"sub": user["username"]})
+        auth_logger.info(f"Successful login for user: {request.username}")
+        
         return LoginResponse(
             access_token=access_token,
             user_id=user["username"]
@@ -135,6 +152,9 @@ def create_app(settings: Settings = None) -> FastAPI:
     @app.post("/register", response_model=UserResponse)
     async def register(request: LoginRequest):
         """Register a new user."""
+        auth_logger = get_logger("puntini.api.auth")
+        auth_logger.info(f"Registration attempt for user: {request.username}")
+        
         try:
             user = auth_manager.create_user(
                 username=request.username,
@@ -142,12 +162,14 @@ def create_app(settings: Settings = None) -> FastAPI:
                 email=f"{request.username}@example.com",  # Default email
                 full_name=request.username.title()
             )
+            auth_logger.info(f"Successful registration for user: {request.username}")
             return UserResponse(
                 username=user["username"],
                 email=user["email"],
                 full_name=user["full_name"]
             )
         except ValueError as e:
+            auth_logger.warning(f"Failed registration for user: {request.username} - {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e)
@@ -204,27 +226,36 @@ def create_app(settings: Settings = None) -> FastAPI:
     
     # WebSocket endpoint
     @app.websocket("/ws/chat")
-    async def websocket_chat(websocket, token: str = None):
+    async def websocket_chat(websocket: WebSocket, token: str = None):
         """WebSocket endpoint for real-time chat."""
+        ws_logger = get_logger("puntini.api.websocket")
+        
         if not token:
+            ws_logger.warning("WebSocket connection attempt without token")
             await websocket.close(code=1008, reason="Missing token")
             return
         
-        # Connect to WebSocket manager
+        ws_logger.info(f"WebSocket connection attempt with token: {token[:10]}...")
+        
+        # Connect to WebSocket manager (this will accept the connection)
         session_id = await websocket_manager.connect(websocket, token)
         if not session_id:
+            ws_logger.warning("Failed to establish WebSocket connection")
             return
+        
+        ws_logger.info(f"WebSocket connection established with session: {session_id}")
         
         try:
             while True:
                 # Receive message
                 data = await websocket.receive_text()
-                message_data = data  # Assume JSON string
+                ws_logger.debug(f"Received WebSocket message for session {session_id}: {data[:100]}...")
                 
                 try:
                     import json
                     message_data = json.loads(data)
                 except json.JSONDecodeError:
+                    ws_logger.warning(f"Invalid JSON received from session {session_id}")
                     # Send error for invalid JSON
                     error_message = Error.create(
                         code=400,
@@ -238,9 +269,10 @@ def create_app(settings: Settings = None) -> FastAPI:
                 await websocket_manager.handle_message(session_id, message_data)
                 
         except WebSocketDisconnect:
+            ws_logger.info(f"WebSocket disconnected for session: {session_id}")
             await websocket_manager.disconnect(session_id)
         except Exception as e:
-            print(f"WebSocket error: {e}")
+            ws_logger.error(f"WebSocket error for session {session_id}: {e}")
             await websocket_manager.disconnect(session_id)
     
     return app

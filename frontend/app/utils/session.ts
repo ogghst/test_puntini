@@ -7,9 +7,7 @@
 
 // Import React for hooks
 import { useCallback, useEffect, useState } from "react";
-
-// Base API configuration
-const API_BASE_URL = "http://localhost:8009";
+import { config, getApiUrl, getWebSocketEndpoint } from "./config";
 
 // Session-related types (compliant with backend models)
 export interface SessionInfo {
@@ -18,13 +16,13 @@ export interface SessionInfo {
   created_at: string;
   last_activity: string;
   is_active: boolean;
-  graph_data: Record<string, any>;
-  chat_history: Array<any>;
+  graph_data: Record<string, unknown>;
+  chat_history: Array<unknown>;
 }
 
 export interface Message {
   type: MessageType;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   session_id?: string;
   timestamp?: string;
   error?: {
@@ -49,17 +47,17 @@ export type MessageType =
 
 export interface SessionCreateRequest {
   user_id: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface MessageRequest {
-  content: any;
+  content: unknown;
   message_type?: MessageType;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ProjectContext {
-  project_context: Record<string, any>;
+  project_context: Record<string, unknown>;
   tasks: TaskInfo[];
   task_count: number;
 }
@@ -71,7 +69,7 @@ export interface TaskInfo {
   status: "pending" | "in_progress" | "completed" | "cancelled";
   priority: "low" | "medium" | "high" | "urgent";
   created_at: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface SessionListResponse {
@@ -94,7 +92,7 @@ export class SessionAPIError extends Error {
   constructor(
     message: string,
     public code?: number,
-    public details?: any
+    public details?: unknown
   ) {
     super(message);
     this.name = "SessionAPIError";
@@ -110,6 +108,8 @@ class WebSocketManager {
   private messageListeners: Array<(message: Message) => void> = [];
   private connectionPromise: Promise<boolean> | null = null;
   private connectionResolve: ((value: boolean) => void) | null = null;
+  private reconnectAttempts: number = 0;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
 
   private constructor() {}
 
@@ -131,11 +131,24 @@ class WebSocketManager {
 
     try {
       this.token = token;
-      const wsUrl = `${API_BASE_URL.replace('http', 'ws')}/ws/chat?token=${token}`;
+      const wsConfig = config.getWebSocketConfig();
+      const wsUrl = `${getWebSocketEndpoint('/ws/chat')}?token=${token}`;
+      
+      if (config.isDebugMode()) {
+        // eslint-disable-next-line no-console
+        console.log("Connecting to WebSocket:", wsUrl);
+      }
+      
       this.websocket = new WebSocket(wsUrl);
 
       this.websocket.onopen = () => {
+        // eslint-disable-next-line no-console
         console.log("WebSocket connected");
+        this.reconnectAttempts = 0;
+        
+        // Start heartbeat
+        this.startHeartbeat();
+        
         // Initialize session
         this.sendMessage({
           type: "init_session",
@@ -146,20 +159,30 @@ class WebSocketManager {
       this.websocket.onmessage = (event) => {
         try {
           const message: Message = JSON.parse(event.data);
+          
           if (message.type === "session_ready") {
-            this.session_id = message.data?.session_id || null;
+            this.session_id = (message.data?.session_id as string) || null;
             if (this.connectionResolve) {
               this.connectionResolve(true);
             }
+          } else if (message.type === "pong") {
+            // Heartbeat response received
+            if (config.isDebugMode()) {
+              // eslint-disable-next-line no-console
+              console.log("Heartbeat pong received");
+            }
           }
+          
           // Notify all listeners
           this.messageListeners.forEach(listener => listener(message));
         } catch (error) {
+          // eslint-disable-next-line no-console
           console.error("Error parsing WebSocket message:", error);
         }
       };
 
       this.websocket.onerror = (error) => {
+        // eslint-disable-next-line no-console
         console.error("WebSocket error:", error);
         if (this.connectionResolve) {
           this.connectionResolve(false);
@@ -167,13 +190,28 @@ class WebSocketManager {
       };
 
       this.websocket.onclose = () => {
+        // eslint-disable-next-line no-console
         console.log("WebSocket disconnected");
+        this.stopHeartbeat();
         this.websocket = null;
         this.session_id = null;
+        
+        // Attempt reconnection if not manually disconnected
+        if (this.token && this.reconnectAttempts < wsConfig.reconnectAttempts) {
+          this.reconnectAttempts++;
+          // eslint-disable-next-line no-console
+          console.log(`Attempting to reconnect (${this.reconnectAttempts}/${wsConfig.reconnectAttempts})...`);
+          setTimeout(() => {
+            if (this.token) {
+              this.connect(this.token);
+            }
+          }, wsConfig.reconnectDelay);
+        }
       };
 
       return this.connectionPromise;
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error("WebSocket connection error:", error);
       if (this.connectionResolve) {
         this.connectionResolve(false);
@@ -183,6 +221,7 @@ class WebSocketManager {
   }
 
   disconnect() {
+    this.stopHeartbeat();
     if (this.websocket) {
       this.websocket.close();
       this.websocket = null;
@@ -191,6 +230,26 @@ class WebSocketManager {
     this.session_id = null;
     this.connectionPromise = null;
     this.connectionResolve = null;
+    this.reconnectAttempts = 0;
+  }
+
+  private startHeartbeat() {
+    const wsConfig = config.getWebSocketConfig();
+    this.heartbeatInterval = setInterval(() => {
+      if (this.isConnected()) {
+        this.sendMessage({
+          type: "ping",
+          data: {}
+        });
+      }
+    }, wsConfig.heartbeatInterval);
+  }
+
+  private stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
   }
 
   isConnected(): boolean {
@@ -230,7 +289,7 @@ export class SessionAPI {
 
   // Authentication functions
   static async login(username: string, password: string): Promise<{ access_token: string; token_type: string; user_id: string }> {
-    const response = await fetch(`${API_BASE_URL}/login`, {
+    const response = await fetch(getApiUrl('/login'), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -251,7 +310,7 @@ export class SessionAPI {
   }
 
   static async register(username: string, password: string): Promise<{ username: string; email: string; full_name: string }> {
-    const response = await fetch(`${API_BASE_URL}/register`, {
+    const response = await fetch(getApiUrl('/register'), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -320,12 +379,12 @@ export class SessionAPI {
   }
 
   // Session management functions (REST-based)
-  static async getMySessions(): Promise<{ sessions: Array<any> }> {
+  static async getMySessions(): Promise<{ sessions: Array<unknown> }> {
     // This would require authentication headers in a real implementation
     return { sessions: [] };
   }
 
-  static async getSessionStats(): Promise<any> {
+  static async getSessionStats(): Promise<unknown> {
     // This would require authentication headers in a real implementation
     return {
       total_sessions: 0,
@@ -359,7 +418,7 @@ export class SessionAPI {
     };
   }
 
-  static async destroySession(sessionId: string): Promise<{ message: string }> {
+  static async destroySession(_sessionId: string): Promise<{ message: string }> {
     // This would require authentication headers in a real implementation
     return { message: "Session destroyed" };
   }
@@ -372,7 +431,7 @@ export function useSession() {
   const [error, setError] = useState<SessionAPIError | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
-  const createSession = useCallback(async (request: SessionCreateRequest) => {
+  const createSession = useCallback(async (_request: SessionCreateRequest) => {
     setIsLoading(true);
     setError(null);
 
@@ -445,7 +504,7 @@ export function useSession() {
 }
 
 // Message management hook for React components
-export function useMessages(sessionId: string | null) {
+export function useMessages(_sessionId: string | null) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<SessionAPIError | null>(null);
@@ -465,7 +524,7 @@ export function useMessages(sessionId: string | null) {
   }, []);
 
   const sendMessage = useCallback(
-    async (request: MessageRequest) => {
+    async (_request: MessageRequest) => {
       if (!SessionAPI.isConnected()) {
         throw new Error("No WebSocket connection available");
       }
@@ -474,7 +533,7 @@ export function useMessages(sessionId: string | null) {
       setError(null);
 
       try {
-        SessionAPI.sendUserPrompt(request.content);
+        SessionAPI.sendUserPrompt(_request.content as string);
       } catch (err) {
         const apiError =
           err instanceof SessionAPIError
@@ -490,7 +549,7 @@ export function useMessages(sessionId: string | null) {
   );
 
   const receiveMessage = useCallback(
-    async (timeout?: number) => {
+    async (_timeout?: number) => {
       // With WebSocket, messages are received automatically through the listener
       // This function is kept for API compatibility but doesn't do anything
       return null;
@@ -510,6 +569,11 @@ export function useMessages(sessionId: string | null) {
     receiveMessage,
     clearMessages,
   };
+}
+
+// Log configuration on module load
+if (config.isDebugMode()) {
+  config.logConfiguration();
 }
 
 
