@@ -19,4 +19,12 @@ COPY ./package.json package-lock.json /app/
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
 COPY --from=build-env /app/build /app/build
 WORKDIR /app
+
+# Set environment variables
+ENV VITE_API_BASE_URL=http://localhost:8025
+ENV PORT=8026
+
+# Expose the port the app runs on
+EXPOSE 8026
+
 CMD ["npm", "run", "start"]
