@@ -5,7 +5,7 @@
  * integrating session management, project context, and task management.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 // import { Button } from '../ui/button';
 import {
@@ -22,16 +22,25 @@ import { ProjectContext } from "../project/ProjectContext";
 import { SessionManager } from "../session/SessionManager";
 import { TaskManager } from "../task/TaskManager";
 import { Badge } from "../ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { useAuth } from "../auth/AuthContext";
 
 export const Dashboard: React.FC = () => {
-  const { currentSession } = useSession();
+  const { currentSession, createSession } = useSession();
   const { user } = useAuth();
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(
     null
   );
   const [activeTab, setActiveTab] = useState("chat");
+
+  // Auto-create a session when Dashboard loads
+  useEffect(() => {
+    if (!currentSession) {
+      createSession({ user_id: "demo-user" }).catch(() => {
+        // Failed to create session
+      });
+    }
+  }, [currentSession, createSession]);
 
   // Handle session selection
   const handleSessionSelect = (session: SessionInfo) => {
@@ -62,12 +71,11 @@ export const Dashboard: React.FC = () => {
               )}
             </div>
             <nav className="flex items-center space-x-4">
-              <a
-                href="#"
+              <button
                 className="text-sm font-medium text-gray-700 hover:text-gray-900"
               >
                 <Settings className="h-5 w-5" />
-              </a>
+              </button>
             </nav>
           </div>
         </div>
@@ -80,51 +88,83 @@ export const Dashboard: React.FC = () => {
           <p className="text-gray-600">
             Manage your business improvement projects and interact with AI agents.
           </p>
+          {contextSession && (
+            <p className="text-xs text-gray-500 mt-1">
+              Session ID: {contextSession.session_id}
+            </p>
+          )}
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="chat" className="flex items-center gap-2">
+        {/* Custom Tab Implementation */}
+        <div className="space-y-6">
+          {/* Tab Navigation */}
+          <div className="grid w-full grid-cols-4 bg-gray-100 p-1 rounded-lg">
+            <button 
+              onClick={() => setActiveTab('chat')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'chat' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'
+              }`}
+            >
               <MessageSquare className="h-4 w-4" />
               Chat
-            </TabsTrigger>
-            <TabsTrigger value="sessions" className="flex items-center gap-2">
+            </button>
+            <button 
+              onClick={() => setActiveTab('sessions')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'sessions' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'
+              }`}
+            >
               <Users className="h-4 w-4" />
               Sessions
-            </TabsTrigger>
-            <TabsTrigger value="tasks" className="flex items-center gap-2">
+            </button>
+            <button 
+              onClick={() => setActiveTab('tasks')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'tasks' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'
+              }`}
+            >
               <CheckSquare className="h-4 w-4" />
               Tasks
-            </TabsTrigger>
-            <TabsTrigger value="context" className="flex items-center gap-2">
+            </button>
+            <button 
+              className="flex items-center gap-2 px-4 py-2 rounded-md opacity-50 cursor-not-allowed" 
+              disabled
+            >
               <FolderOpen className="h-4 w-4" />
               Context
-            </TabsTrigger>
-          </TabsList>
+            </button>
+          </div>
 
-          <TabsContent value="chat" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>AI Agent Chat</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ChatPage />
-              </CardContent>
-            </Card>
-          </TabsContent>
+          {/* Tab Content */}
+          <div className="mt-6">
+            {/* Chat Tab */}
+            <div style={{ display: activeTab === 'chat' ? 'block' : 'none' }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle>AI Agent Chat</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ChatPage />
+                </CardContent>
+              </Card>
+            </div>
 
-          <TabsContent value="sessions" className="mt-6">
-            <SessionManager onSessionSelect={handleSessionSelect} />
-          </TabsContent>
+            {/* Sessions Tab */}
+            <div style={{ display: activeTab === 'sessions' ? 'block' : 'none' }}>
+              <SessionManager onSessionSelect={handleSessionSelect} />
+            </div>
 
-          <TabsContent value="tasks" className="mt-6">
-            <TaskManager sessionId={contextSession?.session_id || null} />
-          </TabsContent>
+            {/* Tasks Tab */}
+            <div style={{ display: activeTab === 'tasks' ? 'block' : 'none' }}>
+              <TaskManager sessionId={contextSession?.session_id || "demo-session"} />
+            </div>
 
-          <TabsContent value="context" className="mt-6">
-            <ProjectContext sessionId={contextSession?.session_id || null} />
-          </TabsContent>
-        </Tabs>
+            {/* Context Tab */}
+            <div style={{ display: activeTab === 'context' ? 'block' : 'none' }}>
+              <ProjectContext sessionId={contextSession?.session_id || null} />
+            </div>
+          </div>
+        </div>
       </main>
     </div>
   );
