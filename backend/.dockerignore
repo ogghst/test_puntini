@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+
+# Configuration
+config.json
+config.json.example
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+
+# Documentation
+*.md
