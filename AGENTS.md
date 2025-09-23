@@ -375,3 +375,82 @@ ON MATCH  SET t += $props, t.updated_at = timestamp()
 - GraphRAG and hierarchical summaries for large corpora.
 - Auto‑tuning of disclosure policies and retry budgets.
 - Scorecards and dashboards in Langfuse for error taxonomy and tool helpfulness.
+
+## Docker
+
+The application can be run in Docker containers. There are separate Docker images for the backend API and frontend application.
+
+### Backend Docker Image
+
+The backend Docker image exposes port 8025 for the web API.
+
+#### Building the Backend Docker Image
+
+```bash
+cd backend
+docker build -t puntini-backend:latest .
+```
+
+#### Running the Backend Docker Container
+
+```bash
+docker run -p 8025:8025 puntini-backend:latest
+```
+
+The API will be available at http://localhost:8025
+
+### Frontend Docker Image
+
+The frontend Docker image exposes port 8026 for the web application and connects to the backend API at http://localhost:8025.
+
+#### Building the Frontend Docker Image
+
+```bash
+cd frontend
+docker build -t puntini-frontend:latest .
+```
+
+#### Running the Frontend Docker Container
+
+```bash
+docker run -p 8026:8026 puntini-frontend:latest
+```
+
+The frontend will be available at http://localhost:8026
+
+### Running Both Containers
+
+To run both the backend and frontend containers together:
+
+```bash
+# Start the backend
+docker run -d --name puntini-backend -p 8025:8025 puntini-backend:latest
+
+# Start the frontend
+docker run -d --name puntini-frontend -p 8026:8026 puntini-frontend:latest
+
+# Access the frontend at http://localhost:8026
+# The frontend will connect to the backend at http://localhost:8025
+```
+
+## GitHub Actions
+
+The project includes GitHub Actions workflows for automated testing and building of Docker images:
+
+### Backend Workflow
+
+Located at `.github/workflows/backend-docker.yml`, this workflow:
+- Builds the backend Docker image on pushes to main branch
+- Runs tests to verify the container works correctly
+- Only triggers on changes to backend files
+
+### Frontend Workflow
+
+Located at `.github/workflows/frontend-docker.yml`, this workflow:
+- Builds the frontend Docker image on pushes to main branch
+- Runs tests to verify the container works correctly
+- Only triggers on changes to frontend files
+
+There is also a `.github/workflows/docker-publish.yml` workflow that publishes the backend Docker image to Docker Hub.
+
+All workflows use Docker Buildx for efficient building and caching.
