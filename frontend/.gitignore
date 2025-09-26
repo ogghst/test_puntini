@@ -1,6 +1,31 @@
-.DS_Store
-/node_modules/
+# Dependencies
+node_modules/
 
-# React Router
-/.react-router/
-/build/
+# Build artifacts
+dist/
+build/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# React Router generated files
+.react-router/
+
+# OS generated files
+.DS_Store
+Thumbs.db

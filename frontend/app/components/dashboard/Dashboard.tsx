@@ -7,7 +7,7 @@
 
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-// import { Button } from '../ui/button';
+import { Button } from '../ui/button';
 import {
   Activity,
   CheckSquare,
@@ -15,8 +15,10 @@ import {
   MessageSquare,
   Settings,
   Users,
+  GitMerge,
 } from "lucide-react";
 import { ChatPage } from "../../chat/ChatPage";
+import GraphPage from "../../routes/graph";
 import { useSession, type SessionInfo } from "@/utils/session";
 import { ProjectContext } from "../project/ProjectContext";
 import { SessionManager } from "../session/SessionManager";
@@ -62,12 +64,9 @@ export const Dashboard: React.FC = () => {
               )}
             </div>
             <nav className="flex items-center space-x-4">
-              <a
-                href="#"
-                className="text-sm font-medium text-gray-700 hover:text-gray-900"
-              >
+              <Button variant="ghost" size="icon">
                 <Settings className="h-5 w-5" />
-              </a>
+              </Button>
             </nav>
           </div>
         </div>
@@ -83,10 +82,14 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="chat" className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
               Chat
+            </TabsTrigger>
+            <TabsTrigger value="graph" className="flex items-center gap-2">
+              <GitMerge className="h-4 w-4" />
+              Graph
             </TabsTrigger>
             <TabsTrigger value="sessions" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
@@ -109,6 +112,19 @@ export const Dashboard: React.FC = () => {
               </CardHeader>
               <CardContent className="p-0">
                 <ChatPage />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="graph" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Graph Visualization</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[600px] w-full">
+                  <GraphPage />
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
