@@ -33,14 +33,15 @@ export const Dashboard: React.FC = () => {
   );
   const [activeTab, setActiveTab] = useState("chat");
 
+
   // Auto-create a session when Dashboard loads
   useEffect(() => {
-    if (!currentSession) {
-      createSession({ user_id: "demo-user" }).catch(() => {
+    if (!currentSession && user) {
+      createSession({ user_id: user.username }).catch(() => {
         // Failed to create session
       });
     }
-  }, [currentSession, createSession]);
+  }, [currentSession, createSession, user]);
 
   // Handle session selection
   const handleSessionSelect = (session: SessionInfo) => {
@@ -82,8 +83,8 @@ export const Dashboard: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
+      <main className="w-full px-4 sm:px-6 lg:px-8 py-8 h-[calc(100vh-80px)] flex flex-col">
+        <div className="mb-6 flex-shrink-0">
           <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
           <p className="text-gray-600">
             Manage your business improvement projects and interact with AI agents.
@@ -96,7 +97,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Custom Tab Implementation */}
-        <div className="space-y-6">
+        <div className="flex-1 flex flex-col space-y-6 min-h-0 w-full">
           {/* Tab Navigation */}
           <div className="grid w-full grid-cols-4 bg-gray-100 p-1 rounded-lg">
             <button 
@@ -136,31 +137,31 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* Tab Content */}
-          <div className="mt-6">
+          <div className="flex-1 flex flex-col min-h-0 w-full">
             {/* Chat Tab */}
-            <div style={{ display: activeTab === 'chat' ? 'block' : 'none' }}>
-              <Card>
-                <CardHeader>
+            <div style={{ display: activeTab === 'chat' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
+              <Card className="flex-1 flex flex-col min-h-0 w-full">
+                <CardHeader className="flex-shrink-0">
                   <CardTitle>AI Agent Chat</CardTitle>
                 </CardHeader>
-                <CardContent className="p-0">
+                <CardContent className="flex-1 p-0 min-h-0">
                   <ChatPage />
                 </CardContent>
               </Card>
             </div>
 
             {/* Sessions Tab */}
-            <div style={{ display: activeTab === 'sessions' ? 'block' : 'none' }}>
+            <div style={{ display: activeTab === 'sessions' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
               <SessionManager onSessionSelect={handleSessionSelect} />
             </div>
 
             {/* Tasks Tab */}
-            <div style={{ display: activeTab === 'tasks' ? 'block' : 'none' }}>
+            <div style={{ display: activeTab === 'tasks' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
               <TaskManager sessionId={contextSession?.session_id || "demo-session"} />
             </div>
 
             {/* Context Tab */}
-            <div style={{ display: activeTab === 'context' ? 'block' : 'none' }}>
+            <div style={{ display: activeTab === 'context' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
               <ProjectContext sessionId={contextSession?.session_id || null} />
             </div>
           </div>

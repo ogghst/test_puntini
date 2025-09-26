@@ -95,41 +95,21 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
     loadTasks();
   }, [sessionId, loadTasks]);
 
-  // Process state updates and merge with existing tasks
+  // Process state updates and replace agent-generated tasks with new ones
   useEffect(() => {
     if (stateUpdates.length > 0) {
       const latestStateUpdate = stateUpdates[stateUpdates.length - 1];
       const newTasksFromStateUpdate = convertToTaskUpdates(latestStateUpdate);
       
-      // Merge new tasks with existing ones, avoiding duplicates
+      // Replace agent-generated tasks with new ones from state update
       setTasks(prevTasks => {
-        const existingTaskIds = new Set(prevTasks.map(task => task.id));
-        const uniqueNewTasks = newTasksFromStateUpdate.filter(task => !existingTaskIds.has(task.id));
+        // Keep only user-created tasks (those without update_type in metadata)
+        const userCreatedTasks = prevTasks.filter(task => !task.metadata?.update_type);
         
-        // Update existing tasks if they match (by description/title)
-        const updatedTasks = prevTasks.map(existingTask => {
-          const matchingNewTask = newTasksFromStateUpdate.find(newTask => 
-            newTask.title === existingTask.title || 
-            newTask.description === existingTask.description
-          );
-          
-          if (matchingNewTask) {
-            // Update the existing task with new information
-            return {
-              ...existingTask,
-              status: matchingNewTask.status,
-              metadata: {
-                ...existingTask.metadata,
-                ...matchingNewTask.metadata,
-                last_updated: new Date().toISOString()
-              }
-            };
-          }
-          
-          return existingTask;
-        });
+        // Add new agent-generated tasks from state update
+        const updatedTasks = [...userCreatedTasks, ...newTasksFromStateUpdate];
         
-        return [...updatedTasks, ...uniqueNewTasks];
+        return updatedTasks;
       });
 
       // Notify parent component of task updates
@@ -618,9 +598,9 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
                               {task.priority}
                             </Badge>
                             {/* Show badge for agent-generated tasks */}
-                            {task.metadata?.update_type && (
+                            {task.metadata?.update_type && typeof task.metadata.update_type === 'string' && (
                               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                                Agent: {task.metadata.update_type as string}
+                                Agent: {task.metadata.update_type}
                               </Badge>
                             )}
                           </div>
@@ -638,11 +618,11 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
                             Created:{" "}
                             {new Date(task.created_at).toLocaleString()}
                           </span>
-                          {task.metadata?.tool_name && (
-                            <span className="truncate">Tool: {task.metadata.tool_name as string}</span>
+                          {task.metadata?.tool_name && typeof task.metadata.tool_name === 'string' && (
+                            <span className="truncate">Tool: {task.metadata.tool_name}</span>
                           )}
-                          {task.metadata?.current_step && (
-                            <span className="truncate">Step: {task.metadata.current_step as string}</span>
+                          {task.metadata?.current_step && typeof task.metadata.current_step === 'string' && (
+                            <span className="truncate">Step: {task.metadata.current_step}</span>
                           )}
                         </div>
                       </div>

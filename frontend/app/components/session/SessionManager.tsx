@@ -23,6 +23,8 @@ import {
   type SessionInfo,
   type SessionStats,
 } from "@/utils/session";
+import { config } from "@/utils/config";
+import { useAuth } from "../auth/AuthContext";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -38,6 +40,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   selectedSessionId,
 }) => {
   const { currentSession, refreshSession } = useSession();
+  const { user } = useAuth();
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [stats, setStats] = useState<SessionStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -62,23 +65,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           ? err
           : new SessionAPIError("Failed to load data");
       
-      // If it's an authentication error and we haven't retried, try to re-authenticate
-      if (apiError.code === 401 && retryCount === 0) {
-        try {
-          // Try to login again
-          const loginResult = await SessionAPI.login("testuser", "testpass");
-          localStorage.setItem('authToken', loginResult.access_token);
-          localStorage.setItem('authUser', loginResult.user_id);
-          
-          // Retry the request
-          await loadData(1);
-          return;
-        } catch {
-          setError("Authentication failed. Please check your credentials.");
-        }
-      } else {
-        setError(apiError.message);
-      }
+      setError(apiError.message);
     } finally {
       setIsLoading(false);
     }
@@ -113,7 +100,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     
     try {
       const newSession = await SessionAPI.createSession({
-        user_id: "frontend_user",
+        user_id: user?.username || "testuser", // Use the authenticated user
         metadata: { source: "session_manager" },
       });
 

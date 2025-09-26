@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { SessionAPI } from "@/utils/session";
 import { config, getApiUrl } from "@/utils/config";
+import { performStorageCleanup, hasInconsistentAuthData } from "@/utils/storage-cleanup";
 
 interface AuthContextType {
   user: { username: string; email: string; full_name: string } | null;
@@ -23,6 +24,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Check if user is already logged in on initial load
   useEffect(() => {
+    // Perform storage cleanup to fix any inconsistencies
+    if (hasInconsistentAuthData()) {
+      console.log('🔧 Fixing inconsistent authentication data...');
+      performStorageCleanup();
+    }
+    
     const authConfig = config.getAuthConfig();
     const storedToken = localStorage.getItem(authConfig.tokenStorageKey);
     const storedUser = localStorage.getItem(authConfig.userStorageKey);

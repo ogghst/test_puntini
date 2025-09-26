@@ -28,6 +28,7 @@ class MessageType(str, Enum):
     REASONING = "reasoning"
     DEBUG = "debug"
     GRAPH_UPDATE = "graph_update"
+    STATE_UPDATE = "state_update"
     ERROR = "error"
     CHAT_HISTORY = "chat_history"
     
@@ -242,6 +243,50 @@ class GraphUpdate(BaseMessage):
         )
 
 
+class StateUpdate(BaseMessage):
+    """Structured state update message for agent progress."""
+    
+    type: MessageType = Field(default=MessageType.STATE_UPDATE, description="Message type")
+    data: Dict[str, Any] = Field(
+        ...,
+        description="State update data containing structured information about agent progress"
+    )
+    
+    @classmethod
+    def create(
+        cls,
+        update_type: str,
+        current_step: str,
+        todo_list: List[Dict[str, Any]],
+        entities_created: List[Dict[str, Any]],
+        session_id: Optional[str] = None,
+        **kwargs
+    ) -> "StateUpdate":
+        """Create a structured state update message.
+        
+        Args:
+            update_type: Type of state update (e.g., 'parse_goal').
+            current_step: Current step in the agent workflow.
+            todo_list: List of todo items with their status.
+            entities_created: List of entities that have been created.
+            session_id: Optional session identifier.
+            **kwargs: Additional data to include in the update.
+            
+        Returns:
+            StateUpdate message instance.
+        """
+        return cls(
+            data={
+                "update_type": update_type,
+                "current_step": current_step,
+                "todo_list": todo_list,
+                "entities_created": entities_created,
+                **kwargs
+            },
+            session_id=session_id
+        )
+
+
 class Error(BaseMessage):
     """Error message."""
     
@@ -332,6 +377,7 @@ MessageUnion = Union[
     Reasoning,
     Debug,
     GraphUpdate,
+    StateUpdate,
     Error,
     ChatHistory,
     Ping,
@@ -369,6 +415,8 @@ def parse_message(data: Dict[str, Any]) -> MessageUnion:
         return Debug(**data)
     elif message_type == MessageType.GRAPH_UPDATE:
         return GraphUpdate(**data)
+    elif message_type == MessageType.STATE_UPDATE:
+        return StateUpdate(**data)
     elif message_type == MessageType.ERROR:
         return Error(**data)
     elif message_type == MessageType.CHAT_HISTORY:

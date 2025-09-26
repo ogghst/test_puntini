@@ -564,8 +564,9 @@ export class SessionAPI {
   }
 
   static getStoredToken(): string | null {
-    // Get token from localStorage or sessionStorage
-    const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+    // Get token from localStorage or sessionStorage using config keys
+    const authConfig = config.getAuthConfig();
+    const token = localStorage.getItem(authConfig.tokenStorageKey) || sessionStorage.getItem(authConfig.tokenStorageKey);
     
     if (!token) {
       return null;
@@ -590,18 +591,17 @@ export class SessionAPI {
   }
 
   static clearStoredToken(): void {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('authUser');
-    sessionStorage.removeItem('authToken');
-    sessionStorage.removeItem('authUser');
+    const authConfig = config.getAuthConfig();
+    localStorage.removeItem(authConfig.tokenStorageKey);
+    localStorage.removeItem(authConfig.userStorageKey);
+    sessionStorage.removeItem(authConfig.tokenStorageKey);
+    sessionStorage.removeItem(authConfig.userStorageKey);
   }
 
   static async refreshToken(): Promise<string> {
-    const loginResult = await this.login("testuser", "testpass");
-    this.clearStoredToken();
-    localStorage.setItem('authToken', loginResult.access_token);
-    localStorage.setItem('authUser', loginResult.user_id);
-    return loginResult.access_token;
+    // This method should be implemented to refresh the token using a refresh token
+    // For now, it throws an error indicating manual re-authentication is required
+    throw new SessionAPIError("Token refresh not implemented. Please login again.", 401);
   }
 
   // Task management functions
@@ -636,16 +636,10 @@ export function useSession() {
 
     try {
       // Check if we already have a valid token
-      let token = SessionAPI.getStoredToken();
+      const token = SessionAPI.getStoredToken();
       
       if (!token) {
-        // If no token, try to login with default credentials
-        const loginResult = await SessionAPI.login("testuser", "testpass");
-        token = loginResult.access_token;
-        
-        // Store token for future use
-        localStorage.setItem('authToken', token);
-        localStorage.setItem('authUser', loginResult.user_id);
+        throw new SessionAPIError("No authentication token found. Please login first.", 401);
       }
       const connected = await SessionAPI.connectWebSocket(token);
       
@@ -686,10 +680,11 @@ export function useSession() {
       SessionAPI.disconnectWebSocket();
       
       // Clear stored authentication data
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('authUser');
-      sessionStorage.removeItem('authToken');
-      sessionStorage.removeItem('authUser');
+      const authConfig = config.getAuthConfig();
+      localStorage.removeItem(authConfig.tokenStorageKey);
+      localStorage.removeItem(authConfig.userStorageKey);
+      sessionStorage.removeItem(authConfig.tokenStorageKey);
+      sessionStorage.removeItem(authConfig.userStorageKey);
       
       setCurrentSession(null);
       setIsConnected(false);
@@ -822,7 +817,8 @@ export function useStateUpdates(sessionId: string | null) {
     const tasks: TaskInfo[] = [];
     
     // Convert todo items to tasks
-    stateUpdate.todo_list.forEach((todo, index) => {
+    if (Array.isArray(stateUpdate.todo_list)) {
+      stateUpdate.todo_list.forEach((todo, index) => {
       const task: TaskInfo = {
         id: `todo-${stateUpdate.update_type}-${index}`,
         title: todo.description,
@@ -840,9 +836,12 @@ export function useStateUpdates(sessionId: string | null) {
       };
       tasks.push(task);
     });
+    }
 
+    /*
     // Convert entities to tasks if they represent actionable items
-    stateUpdate.entities_created.forEach((entity, index) => {
+    if (Array.isArray(stateUpdate.entities_created)) {
+      stateUpdate.entities_created.forEach((entity, index) => {
       if (entity.type === "node" && entity.label) {
         const task: TaskInfo = {
           id: `entity-${stateUpdate.update_type}-${index}`,
@@ -862,6 +861,9 @@ export function useStateUpdates(sessionId: string | null) {
         tasks.push(task);
       }
     });
+    }
+    */
+    
 
     return tasks;
   }, []);
