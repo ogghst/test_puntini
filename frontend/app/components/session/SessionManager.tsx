@@ -10,8 +10,6 @@ import {
   AlertCircle,
   Clock,
   Eye,
-  Plus,
-  RefreshCw,
   Trash2,
   Users,
 } from "lucide-react";
@@ -187,23 +185,6 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
             Manage user sessions and monitor activity
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadData(0)}
-            disabled={isLoading}
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
-            />
-            Refresh
-          </Button>
-          <Button size="sm" onClick={handleCreateSession} disabled={isLoading}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Session
-          </Button>
-        </div>
       </div>
 
       {/* Error Display */}
@@ -220,7 +201,6 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                   onClick={() => loadData(0)}
                   disabled={isLoading}
                 >
-                  <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? "animate-spin" : ""}`} />
                   Retry
                 </Button>
                 <Button
@@ -241,7 +221,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
         <Card className="border-blue-200 bg-blue-50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-blue-800">
-              <RefreshCw className="h-4 w-4 animate-spin" />
+              <div className="h-4 w-4 animate-spin border-2 border-blue-300 border-t-blue-600 rounded-full" />
               <span>Loading session data...</span>
             </div>
           </CardContent>
@@ -332,7 +312,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                   size="sm"
                   onClick={handleRefreshSession}
                 >
-                  <RefreshCw className="h-4 w-4" />
+                  ↻
                 </Button>
               </div>
             </div>
@@ -444,7 +424,6 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                     disabled={isLoading}
                     className="mt-2"
                   >
-                    <Plus className="h-4 w-4 mr-2" />
                     Create First Session
                   </Button>
                 </div>

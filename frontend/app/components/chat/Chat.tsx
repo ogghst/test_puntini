@@ -34,7 +34,7 @@ export const Chat: React.FC<ChatProps> = ({
   onMessageSent: _onMessageSent,
   onError,
   welcomeMessage = "Hello! How can I help you with your project today?",
-  showDebugMessages = true,
+  showDebugMessages = false,
   inputPlaceholder = "Type a message...",
   disabled = false,
 }) => {
@@ -99,7 +99,9 @@ export const Chat: React.FC<ChatProps> = ({
       return timestampA - timestampB;
     });
     
-    const newDisplayMessages = sortedMessages.map(transformSessionMessage);
+    const newDisplayMessages = sortedMessages
+      .map(transformSessionMessage)
+      .filter((msg): msg is DisplayMessage => msg !== null);
     setDisplayMessages(newDisplayMessages);
   }, [sessionMessages]);
 

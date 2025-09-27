@@ -97,12 +97,16 @@ class ConfigManager {
       ...baseConfig,
       api: {
         ...baseConfig.api,
-        baseUrl: this.environment.VITE_API_BASE_URL || baseConfig.api.baseUrl,
+        baseUrl: this.environment.VITE_API_BASE_URL || "http://localhost:8009",
       },
       features: {
         ...baseConfig.features,
-        enableDebugMode: this.parseBoolean(this.environment.VITE_DEBUG_MODE, baseConfig.features.enableDebugMode),
-        enableAnalytics: this.parseBoolean(this.environment.VITE_ANALYTICS_ENABLED, baseConfig.features.enableAnalytics),
+        enableDebugMode: this.parseBoolean(String(baseConfig.features.enableDebugMode),
+          false
+        ),
+        enableAnalytics: this.parseBoolean(String(baseConfig.features.enableAnalytics),
+          false
+        ),
       },
       development: {
         ...baseConfig.development,
@@ -245,7 +249,7 @@ class ConfigManager {
    * Check if debug mode is enabled
    */
   isDebugMode(): boolean {
-    return this.config.features.enableDebugMode || this.isDevelopment();
+    return this.config.features.enableDebugMode;
   }
 
   /**

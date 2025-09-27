@@ -14,8 +14,6 @@ import {
   Edit3,
   // Trash2,
   Filter,
-  Plus,
-  RefreshCw,
   Save,
   X,
 } from "lucide-react";
@@ -265,27 +263,6 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
           <p className="text-sm text-gray-600">
             Session: {sessionId.slice(0, 8)}...
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadTasks}
-            disabled={isLoading}
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
-            />
-            Refresh
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setIsCreating(true)}
-            disabled={isLoading || isCreating}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            New Task
-          </Button>
         </div>
       </div>
 
@@ -557,7 +534,7 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
         <CardContent className="overflow-hidden">
           {isLoading ? (
             <div className="text-center py-8">
-              <RefreshCw className="h-8 w-8 mx-auto animate-spin text-gray-400" />
+              <div className="h-8 w-8 mx-auto animate-spin text-gray-400 border-4 border-gray-300 border-t-blue-600 rounded-full" />
               <p className="mt-2 text-gray-600">Loading tasks...</p>
             </div>
           ) : filteredTasks.length === 0 ? (

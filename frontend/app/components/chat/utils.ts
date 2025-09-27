@@ -7,6 +7,7 @@
 
 import { v4 as uuidv4 } from "uuid";
 import { type Message as SessionMessage } from "@/utils/session";
+import { isDebugMode } from "@/utils/config";
 import type { 
   DisplayMessage, 
   MessageSource, 
@@ -16,8 +17,14 @@ import type {
 
 /**
  * Transform a session message to display message format
+ * Filters out debug and pong messages when debug mode is disabled
  */
-export const transformSessionMessage = (msg: SessionMessage): DisplayMessage => {
+export const transformSessionMessage = (msg: SessionMessage): DisplayMessage | null => {
+  // Filter out debug and pong messages when debug mode is disabled
+  if (!isDebugMode() && (msg.type === "debug" || msg.type === "pong")) {
+    return null;
+  }
+
   let content = "";
   let source: MessageSource = "unknown";
   let type: MessageType = "OtherMessage";
@@ -49,6 +56,11 @@ export const transformSessionMessage = (msg: SessionMessage): DisplayMessage => 
     content = "STATE_UPDATE_MESSAGE";
     source = "status";
     type = "StatusMessage";
+  } else if (msg.type === "pong") {
+    // Pong messages are heartbeat responses - only show in debug mode
+    content = "Heartbeat response";
+    source = "debug";
+    type = "DebugMessage";
   } else {
     content = JSON.stringify(msg.data || msg);
     source = (msg.type as MessageSource) || "unknown";

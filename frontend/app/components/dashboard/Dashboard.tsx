@@ -16,6 +16,7 @@ import {
   Settings,
   Users,
   Network,
+  BarChart3,
 } from "lucide-react";
 import { ChatPage } from "../../chat/ChatPage";
 import { useSession, type SessionInfo } from "@/utils/session";
@@ -27,6 +28,7 @@ import { Badge } from "../ui/badge";
 import { AuthContext } from "../auth/AuthContext";
 import { useContext } from "react";
 import { GraphContainer } from "../graph/GraphContainer";
+import { Status } from "../status/Status";
 
 export const Dashboard: React.FC = () => {
   const { currentSession, createSession } = useSession();
@@ -117,7 +119,7 @@ export const Dashboard: React.FC = () => {
         {/* Custom Tab Implementation */}
         <div className="flex-1 flex flex-col space-y-6 min-h-0 w-full">
           {/* Tab Navigation */}
-          <div className="grid w-full grid-cols-5 bg-gray-100 p-1 rounded-lg">
+          <div className="grid w-full grid-cols-6 bg-gray-100 p-1 rounded-lg">
             <button 
               onClick={() => setActiveTab('chat')}
               className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
@@ -155,6 +157,15 @@ export const Dashboard: React.FC = () => {
               Graph
             </button>
             <button 
+              onClick={() => setActiveTab('status')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'status' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'
+              }`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              Status
+            </button>
+            <button 
               className="flex items-center gap-2 px-4 py-2 rounded-md opacity-50 cursor-not-allowed" 
               disabled
             >
@@ -190,6 +201,11 @@ export const Dashboard: React.FC = () => {
             {/* Graph Tab */}
             <div style={{ display: activeTab === 'graph' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
               <GraphContainer />
+            </div>
+
+            {/* Status Tab */}
+            <div style={{ display: activeTab === 'status' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
+              <Status sessionId={contextSession?.session_id || null} />
             </div>
 
             {/* Context Tab */}
