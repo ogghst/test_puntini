@@ -14,12 +14,12 @@ import {
   useSession, 
   SessionAPIError
 } from "@/utils/session";
-import { useAuth } from "../auth/AuthContext";
+import { AuthContext } from "../auth/AuthContext";
+import { useContext } from "react";
 import type { ChatProps, DisplayMessage } from "./types";
 import { 
   transformSessionMessage, 
-  createWelcomeMessage, 
-  createUserMessage 
+  createWelcomeMessage
 } from "./utils";
 
 /**
@@ -31,7 +31,7 @@ import {
 export const Chat: React.FC<ChatProps> = ({
   sessionId,
   onSessionCreated,
-  onMessageSent,
+  onMessageSent: _onMessageSent,
   onError,
   welcomeMessage = "Hello! How can I help you with your project today?",
   showDebugMessages = true,
@@ -41,7 +41,10 @@ export const Chat: React.FC<ChatProps> = ({
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
+  
+  // Get auth context with defensive check
+  const authContext = useContext(AuthContext);
+  const { user } = authContext || { user: null };
 
   // Session management hooks
   const {
@@ -148,6 +151,15 @@ export const Chat: React.FC<ChatProps> = ({
     return (
       <div className="flex flex-col h-full p-4 items-center justify-center">
         <div className="text-lg">Creating session...</div>
+      </div>
+    );
+  }
+
+  // Show loading message if auth context is not available
+  if (!authContext) {
+    return (
+      <div className="flex flex-col h-full p-4 items-center justify-center">
+        <div className="text-lg text-gray-600">Initializing authentication...</div>
       </div>
     );
   }

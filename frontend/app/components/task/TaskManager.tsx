@@ -103,8 +103,8 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
       
       // Replace agent-generated tasks with new ones from state update
       setTasks(prevTasks => {
-        // Keep only user-created tasks (those without update_type in metadata)
-        const userCreatedTasks = prevTasks.filter(task => !task.metadata?.update_type);
+        // Keep only user-created tasks (those without is_agent_generated flag)
+        const userCreatedTasks = prevTasks.filter(task => !task.metadata?.is_agent_generated);
         
         // Add new agent-generated tasks from state update
         const updatedTasks = [...userCreatedTasks, ...newTasksFromStateUpdate];
@@ -598,9 +598,9 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
                               {task.priority}
                             </Badge>
                             {/* Show badge for agent-generated tasks */}
-                            {task.metadata?.update_type && typeof task.metadata.update_type === 'string' && (
+                            {task.metadata?.is_agent_generated && (
                               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                                Agent: {task.metadata.update_type}
+                                Agent: {task.metadata.update_type || 'generated'}
                               </Badge>
                             )}
                           </div>
@@ -614,16 +614,6 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
 
                         <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
                           <span className="truncate">ID: {task.id}</span>
-                          <span className="whitespace-nowrap">
-                            Created:{" "}
-                            {new Date(task.created_at).toLocaleString()}
-                          </span>
-                          {task.metadata?.tool_name && typeof task.metadata.tool_name === 'string' && (
-                            <span className="truncate">Tool: {task.metadata.tool_name}</span>
-                          )}
-                          {task.metadata?.current_step && typeof task.metadata.current_step === 'string' && (
-                            <span className="truncate">Step: {task.metadata.current_step}</span>
-                          )}
                         </div>
                       </div>
 

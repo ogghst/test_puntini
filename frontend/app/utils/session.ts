@@ -83,7 +83,6 @@ export interface StateUpdateData {
   todo_list: TodoItem[];
   entities_created: EntityInfo[];
   progress?: string[];
-  artifacts?: unknown[];
   failures?: unknown[];
 }
 
@@ -621,6 +620,63 @@ export class SessionAPI {
     };
     return newTask;
   }
+
+  // Graph API functions
+  static async getGraphData(): Promise<{ nodes: unknown[]; edges: unknown[]; total_nodes: number; total_edges: number }> {
+    const token = this.getStoredToken();
+    if (!token) {
+      throw new SessionAPIError("No authentication token found");
+    }
+
+    const response = await fetch(getApiUrl('/graph'), {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new SessionAPIError(
+        errorData.detail || `HTTP ${response.status}: ${response.statusText}`,
+        response.status,
+        errorData
+      );
+    }
+
+    return response.json();
+  }
+
+  static async getSubgraph(matchSpec: Record<string, unknown>, depth: number = 1): Promise<{ nodes: unknown[]; edges: unknown[]; depth: number; central_nodes: string[] }> {
+    const token = this.getStoredToken();
+    if (!token) {
+      throw new SessionAPIError("No authentication token found");
+    }
+
+    const response = await fetch(getApiUrl('/graph/subgraph'), {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        match_spec: matchSpec,
+        depth: depth
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new SessionAPIError(
+        errorData.detail || `HTTP ${response.status}: ${response.statusText}`,
+        response.status,
+        errorData
+      );
+    }
+
+    return response.json();
+  }
 }
 
 // Session management hook for React components
@@ -820,7 +876,7 @@ export function useStateUpdates(sessionId: string | null) {
     if (Array.isArray(stateUpdate.todo_list)) {
       stateUpdate.todo_list.forEach((todo, index) => {
       const task: TaskInfo = {
-        id: `todo-${stateUpdate.update_type}-${index}`,
+        id: `agent-${stateUpdate.update_type}-${todo.step_number || index}-${Date.now()}`,
         title: todo.description,
         description: `Tool: ${todo.tool_name || 'unknown'}, Complexity: ${todo.estimated_complexity || 'medium'}`,
         status: todo.status === "done" ? "completed" : "pending",
@@ -831,7 +887,7 @@ export function useStateUpdates(sessionId: string | null) {
           step_number: todo.step_number,
           tool_name: todo.tool_name,
           update_type: stateUpdate.update_type,
-          current_step: stateUpdate.current_step
+          is_agent_generated: true
         }
       };
       tasks.push(task);
@@ -877,6 +933,57 @@ export function useStateUpdates(sessionId: string | null) {
     error,
     convertToTaskUpdates,
     clearStateUpdates,
+  };
+}
+
+// Graph data hook for React components
+export function useGraphData() {
+  const [graphData, setGraphData] = useState<{ nodes: unknown[]; edges: unknown[]; total_nodes: number; total_edges: number } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<SessionAPIError | null>(null);
+
+  const loadGraphData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await SessionAPI.getGraphData();
+      setGraphData(data);
+    } catch (err) {
+      const apiError = err instanceof SessionAPIError ? err : new SessionAPIError("Failed to load graph data");
+      setError(apiError);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadSubgraph = useCallback(async (matchSpec: Record<string, unknown>, depth: number = 1) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await SessionAPI.getSubgraph(matchSpec, depth);
+      // Convert subgraph format to match graph data format
+      setGraphData({
+        nodes: data.nodes,
+        edges: data.edges,
+        total_nodes: data.nodes.length,
+        total_edges: data.edges.length
+      });
+    } catch (err) {
+      const apiError = err instanceof SessionAPIError ? err : new SessionAPIError("Failed to load subgraph");
+      setError(apiError);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return {
+    graphData,
+    loading,
+    error,
+    loadGraphData,
+    loadSubgraph,
   };
 }
 

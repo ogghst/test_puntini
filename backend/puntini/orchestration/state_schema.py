@@ -49,7 +49,6 @@ class State(TypedDict):
     
     # Agent components (shared across all nodes)
     tool_registry: Optional[Any]  # Tool registry instance
-    graph_store: Optional[Any]  # Graph store instance
     context_manager: Optional[Any]  # Context manager instance
     tracer: Optional[Any]  # Tracer instance
     

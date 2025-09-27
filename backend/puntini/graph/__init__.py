@@ -7,14 +7,18 @@ All implementations follow idempotent semantics and transactional guarantees.
 
 from .graph_store_factory import (
     create_memory_graph_store,
+    create_memgraph_graph_store,
     make_graph_store,
     GraphStoreConfig,
 )
 from .in_memory_graph import InMemoryGraphStore
+from .memgraph_graph import MemgraphGraphStore
 
 __all__ = [
     "create_memory_graph_store",
+    "create_memgraph_graph_store",
     "make_graph_store",
     "GraphStoreConfig",
     "InMemoryGraphStore",
+    "MemgraphGraphStore",
 ]

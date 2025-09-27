@@ -60,6 +60,14 @@ export function hasInconsistentAuthData(): boolean {
   const hardcodedToken = localStorage.getItem('authToken');
   const hardcodedUser = localStorage.getItem('authUser');
   
+  // If config keys are the same as hardcoded keys, there's no inconsistency
+  const configUsesHardcodedKeys = authConfig.tokenStorageKey === 'authToken' && authConfig.userStorageKey === 'authUser';
+  
+  if (configUsesHardcodedKeys) {
+    // No inconsistency if config is using the same keys as hardcoded
+    return false;
+  }
+  
   const hasConfigData = !!(configToken || configUser);
   const hasHardcodedData = !!(hardcodedToken || hardcodedUser);
   

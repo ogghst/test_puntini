@@ -74,7 +74,6 @@ def create_simple_agent() -> StateGraph:
 
 
 def create_agent_with_components(
-    graph_store: GraphStore,
     context_manager: ContextManager,
     tool_registry: ToolRegistry,
     tracer: Tracer
@@ -82,7 +81,6 @@ def create_agent_with_components(
     """Create an agent with pre-configured components.
     
     Args:
-        graph_store: Configured graph store instance.
         context_manager: Configured context manager instance.
         tool_registry: Configured tool registry instance.
         tracer: Configured tracer instance.
@@ -95,7 +93,7 @@ def create_agent_with_components(
         configuration and is useful for testing and advanced use cases.
         The components are stored directly in the agent state and are accessible
         to all nodes during execution. Multiple agents can run concurrently
-        with different configurations.
+        with different configurations. Graph store is now managed per session.
     """
     # Create the agent graph
     from ..orchestration.graph import create_agent_graph
@@ -103,8 +101,8 @@ def create_agent_with_components(
     
     # Store components in the graph for runtime access
     # This allows tools to access components through get_runtime()
+    # Note: graph_store is no longer stored here as it's managed per session
     graph._components = {
-        'graph_store': graph_store,
         'context_manager': context_manager,
         'tool_registry': tool_registry,
         'tracer': tracer
@@ -115,7 +113,6 @@ def create_agent_with_components(
 
 def create_initial_state(
     goal: str,
-    graph_store: GraphStore,
     context_manager: ContextManager,
     tool_registry: ToolRegistry,
     tracer: Tracer,
@@ -125,14 +122,13 @@ def create_initial_state(
     
     Args:
         goal: The goal for the agent to achieve.
-        graph_store: Configured graph store instance.
         context_manager: Configured context manager instance.
         tool_registry: Configured tool registry instance.
         tracer: Configured tracer instance.
         **kwargs: Additional state parameters.
         
     Returns:
-        Initial state with all components.
+        Initial state with all components. Graph store is managed per session.
     """
     return State(
         goal=goal,
@@ -147,7 +143,6 @@ def create_initial_state(
         artifacts=[],
         result={},
         tool_registry=tool_registry,
-        graph_store=graph_store,
         context_manager=context_manager,
         tracer=tracer
     )

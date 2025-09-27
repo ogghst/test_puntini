@@ -349,7 +349,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           <ScrollArea className="h-96">
             <div className="space-y-2">
               {sessions.length > 0 ? sessions.map((session) => (
-                <button
+                <div
                   key={session.session_id}
                   className={`w-full text-left p-4 border rounded-lg cursor-pointer transition-colors ${
                     selectedSessionId === session.session_id
@@ -429,7 +429,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                       </Button>
                     </div>
                   </div>
-                </button>
+                </div>
               )) : null}
 
               {sessions.length === 0 && !isLoading && (

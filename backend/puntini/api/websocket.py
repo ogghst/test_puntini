@@ -40,7 +40,6 @@ from .models import (
 )
 from .session import SessionManager, session_manager
 from ..agents.agent_factory import create_simple_agent, create_agent_with_components
-from ..graph.graph_store_factory import create_memory_graph_store
 from ..context.context_manager_factory import create_simple_context_manager
 from ..tools.tool_setup import create_configured_tool_registry
 from ..observability.tracer_factory import create_console_tracer
@@ -67,15 +66,13 @@ class WebSocketManager:
     def _initialize_agent(self) -> None:
         """Initialize the LangGraph agent with components."""
         try:
-            # Create agent components
-            graph_store = create_memory_graph_store()
+            # Create agent components (excluding graph_store which is now per-session)
             context_manager = create_simple_context_manager()
             tool_registry = create_configured_tool_registry()
             tracer = create_console_tracer()
             
             # Create the agent with components
             self.agent = create_agent_with_components(
-                graph_store=graph_store,
                 context_manager=context_manager,
                 tool_registry=tool_registry,
                 tracer=tracer
@@ -367,13 +364,21 @@ class WebSocketManager:
             
             # Get components from the agent
             components = getattr(self.agent, '_components', {})
-            graph_store = components.get('graph_store')
             context_manager = components.get('context_manager')
             tool_registry = components.get('tool_registry')
             tracer = components.get('tracer')
             
-            if not all([graph_store, context_manager, tool_registry, tracer]):
+            if not all([context_manager, tool_registry, tracer]):
                 raise ValueError("Agent components not properly initialized")
+            
+            # Get graph store from session
+            session_data = self.session_manager.get_session(session_id)
+            if not session_data:
+                raise ValueError("Session not found")
+            
+            graph_store = session_data.graph_store
+            if not graph_store:
+                raise ValueError("Graph store not available in session")
             
             # Create LLM for the graph context (like in CLI)
             from ..llm.llm_models import LLMFactory
@@ -383,7 +388,6 @@ class WebSocketManager:
             # Create initial state
             initial_state = create_initial_state(
                 goal=message.data.get("prompt", ""),
-                graph_store=graph_store,
                 context_manager=context_manager,
                 tool_registry=tool_registry,
                 tracer=tracer
@@ -519,7 +523,6 @@ class WebSocketManager:
                     })
             
             progress = data.get("progress", [])
-            artifacts = data.get("artifacts", [])
             failures = data.get("failures", [])
 
             state_update = StateUpdate.create(
@@ -529,7 +532,6 @@ class WebSocketManager:
                 entities_created=entities_created,
                 session_id=session_id,
                 progress=progress,
-                artifacts=artifacts,
                 failures=failures
             )
 

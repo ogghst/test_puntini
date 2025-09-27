@@ -15,6 +15,7 @@ import {
   MessageSquare,
   Settings,
   Users,
+  Network,
 } from "lucide-react";
 import { ChatPage } from "../../chat/ChatPage";
 import { useSession, type SessionInfo } from "@/utils/session";
@@ -23,11 +24,16 @@ import { SessionManager } from "../session/SessionManager";
 import { TaskManager } from "../task/TaskManager";
 import { Badge } from "../ui/badge";
 // import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { useAuth } from "../auth/AuthContext";
+import { AuthContext } from "../auth/AuthContext";
+import { useContext } from "react";
+import { GraphContainer } from "../graph/GraphContainer";
 
 export const Dashboard: React.FC = () => {
   const { currentSession, createSession } = useSession();
-  const { user } = useAuth();
+  
+  // Get auth context with defensive check
+  const authContext = useContext(AuthContext);
+  const { user } = authContext || { user: null };
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(
     null
   );
@@ -51,6 +57,18 @@ export const Dashboard: React.FC = () => {
 
   // Get current session for context
   const contextSession = selectedSession || currentSession;
+
+  // Show loading message if auth context is not available
+  if (!authContext) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Loading...</h1>
+          <p className="text-gray-600">Initializing authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -99,7 +117,7 @@ export const Dashboard: React.FC = () => {
         {/* Custom Tab Implementation */}
         <div className="flex-1 flex flex-col space-y-6 min-h-0 w-full">
           {/* Tab Navigation */}
-          <div className="grid w-full grid-cols-4 bg-gray-100 p-1 rounded-lg">
+          <div className="grid w-full grid-cols-5 bg-gray-100 p-1 rounded-lg">
             <button 
               onClick={() => setActiveTab('chat')}
               className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
@@ -126,6 +144,15 @@ export const Dashboard: React.FC = () => {
             >
               <CheckSquare className="h-4 w-4" />
               Tasks
+            </button>
+            <button 
+              onClick={() => setActiveTab('graph')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'graph' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'
+              }`}
+            >
+              <Network className="h-4 w-4" />
+              Graph
             </button>
             <button 
               className="flex items-center gap-2 px-4 py-2 rounded-md opacity-50 cursor-not-allowed" 
@@ -158,6 +185,11 @@ export const Dashboard: React.FC = () => {
             {/* Tasks Tab */}
             <div style={{ display: activeTab === 'tasks' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
               <TaskManager sessionId={contextSession?.session_id || "demo-session"} />
+            </div>
+
+            {/* Graph Tab */}
+            <div style={{ display: activeTab === 'graph' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
+              <GraphContainer />
             </div>
 
             {/* Context Tab */}

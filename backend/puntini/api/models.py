@@ -427,3 +427,57 @@ def parse_message(data: Dict[str, Any]) -> MessageUnion:
         return Pong(**data)
     else:
         raise ValueError(f"Unsupported message type: {message_type}")
+
+
+# Graph API Models
+
+class GraphNodeResponse(BaseModel):
+    """Graph node response model."""
+    
+    id: str = Field(..., description="Node ID")
+    label: str = Field(..., description="Node label")
+    key: str = Field(..., description="Node key")
+    properties: Dict[str, Any] = Field(default_factory=dict, description="Node properties")
+    created_at: Optional[str] = Field(None, description="Creation timestamp")
+    updated_at: Optional[str] = Field(None, description="Last update timestamp")
+
+
+class GraphEdgeResponse(BaseModel):
+    """Graph edge response model."""
+    
+    id: str = Field(..., description="Edge ID")
+    relationship_type: str = Field(..., description="Relationship type")
+    source_id: str = Field(..., description="Source node ID")
+    target_id: str = Field(..., description="Target node ID")
+    source_key: str = Field(..., description="Source node key")
+    target_key: str = Field(..., description="Target node key")
+    source_label: str = Field(..., description="Source node label")
+    target_label: str = Field(..., description="Target node label")
+    properties: Dict[str, Any] = Field(default_factory=dict, description="Edge properties")
+    created_at: Optional[str] = Field(None, description="Creation timestamp")
+    updated_at: Optional[str] = Field(None, description="Last update timestamp")
+
+
+class GraphDataResponse(BaseModel):
+    """Complete graph data response model."""
+    
+    nodes: List[GraphNodeResponse] = Field(..., description="List of nodes")
+    edges: List[GraphEdgeResponse] = Field(..., description="List of edges")
+    total_nodes: int = Field(..., description="Total number of nodes")
+    total_edges: int = Field(..., description="Total number of edges")
+
+
+class SubgraphRequest(BaseModel):
+    """Request model for subgraph queries."""
+    
+    match_spec: Dict[str, Any] = Field(..., description="Match specification")
+    depth: int = Field(default=1, ge=0, le=5, description="Maximum depth for subgraph")
+
+
+class SubgraphResponse(BaseModel):
+    """Subgraph response model."""
+    
+    nodes: List[GraphNodeResponse] = Field(..., description="Subgraph nodes")
+    edges: List[GraphEdgeResponse] = Field(..., description="Subgraph edges")
+    depth: int = Field(..., description="Actual depth used")
+    central_nodes: List[str] = Field(..., description="Central node IDs")
