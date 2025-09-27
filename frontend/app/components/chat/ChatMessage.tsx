@@ -11,6 +11,8 @@ import { Avatar, AvatarFallback } from "../ui/avatar";
 import { Card, CardContent } from "../ui/card";
 import type { ChatMessageProps } from "./types";
 import { getAvatarForSource, getCardColorForSource } from "./utils";
+import { StatusMessage } from "./StatusMessage";
+import { type Message as SessionMessage, type StateUpdateData } from "@/utils/session";
 
 /**
  * ChatMessage component for rendering individual messages
@@ -20,7 +22,8 @@ import { getAvatarForSource, getCardColorForSource } from "./utils";
  */
 export const ChatMessage: React.FC<ChatMessageProps> = ({ 
   message, 
-  showDebugMessages = true 
+  showDebugMessages = true,
+  originalMessage
 }) => {
 
   // Don't render debug messages if they're disabled
@@ -30,6 +33,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
   const isUserMessage = message.source === "User";
   const isDebugMessage = message.type === "DebugMessage";
+  const isStatusMessage = message.type === "StatusMessage";
 
   return (
     <div
@@ -37,8 +41,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         isUserMessage ? "justify-end" : "justify-start"
       }`}
     >
-      {/* Avatar for non-user messages (except debug) */}
-      {!isUserMessage && !isDebugMessage && (
+      {/* Avatar for non-user messages (except debug and status) */}
+      {!isUserMessage && !isDebugMessage && !isStatusMessage && (
         <Avatar>
           <AvatarFallback>
             {getAvatarForSource(message.source)}
@@ -61,6 +65,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             {message.text}
           </div>
         </div>
+      ) : isStatusMessage && originalMessage ? (
+        <StatusMessage 
+          data={originalMessage.data as unknown as StateUpdateData} 
+          timestamp={message.timestamp}
+        />
       ) : (
         <Card
           className={`w-3/4 ${getCardColorForSource(message.source)}`}

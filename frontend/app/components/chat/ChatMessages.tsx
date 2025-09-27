@@ -9,6 +9,7 @@ import React, { useEffect, useRef } from "react";
 import { ScrollArea } from "../ui/scroll-area";
 import { ChatMessage } from "./ChatMessage";
 import type { ChatMessagesProps } from "./types";
+import { type Message as SessionMessage } from "@/utils/session";
 
 /**
  * ChatMessages component for rendering the message list
@@ -18,7 +19,8 @@ import type { ChatMessagesProps } from "./types";
  */
 export const ChatMessages: React.FC<ChatMessagesProps> = ({ 
   messages, 
-  showDebugMessages = true 
+  showDebugMessages = true,
+  originalMessages = []
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -36,11 +38,12 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           ref={scrollContainerRef}
           className="space-y-4 p-4 w-full"
         >
-          {messages.map((message) => (
+          {messages.map((message, index) => (
             <ChatMessage
               key={message.id}
               message={message}
               showDebugMessages={showDebugMessages}
+              originalMessage={originalMessages[index]}
             />
           ))}
         </div>

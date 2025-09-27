@@ -193,6 +193,7 @@ export const Chat: React.FC<ChatProps> = ({
         <ChatMessages 
           messages={displayMessages}
           showDebugMessages={showDebugMessages}
+          originalMessages={sessionMessages}
         />
       </div>
       <div className="flex-shrink-0 p-4 border-t bg-background w-full">

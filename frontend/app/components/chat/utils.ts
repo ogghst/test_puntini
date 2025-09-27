@@ -44,6 +44,11 @@ export const transformSessionMessage = (msg: SessionMessage): DisplayMessage => 
     content = msg.error?.message || JSON.stringify(msg.error);
     source = "error";
     type = "ErrorMessage";
+  } else if (msg.type === "state_update") {
+    // For state_update messages, we'll use a special marker to identify them
+    content = "STATE_UPDATE_MESSAGE";
+    source = "status";
+    type = "StatusMessage";
   } else {
     content = JSON.stringify(msg.data || msg);
     source = (msg.type as MessageSource) || "unknown";
@@ -74,6 +79,8 @@ export const getAvatarForSource = (source: MessageSource): string => {
       return "D";
     case "error":
       return "E";
+    case "status":
+      return "S";
     default:
       return source.charAt(0).toUpperCase();
   }
@@ -94,6 +101,8 @@ export const getCardColorForSource = (source: MessageSource): string => {
       return "bg-accent text-accent-foreground";
     case "error":
       return "bg-destructive text-destructive-foreground";
+    case "status":
+      return "bg-blue-50 text-blue-900";
     default:
       return "bg-card text-card-foreground";
   }

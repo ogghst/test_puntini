@@ -27,6 +27,7 @@ export type MessageSource =
   | "reasoning"
   | "debug"
   | "error"
+  | "status"
   | "unknown";
 
 /**
@@ -38,6 +39,7 @@ export type MessageType =
   | "ReasoningMessage"
   | "DebugMessage"
   | "ErrorMessage"
+  | "StatusMessage"
   | "OtherMessage";
 
 /**
@@ -68,6 +70,7 @@ export interface ChatProps {
 export interface ChatMessageProps {
   message: DisplayMessage;
   showDebugMessages?: boolean;
+  originalMessage?: SessionMessage;
 }
 
 /**
@@ -88,6 +91,7 @@ export interface ChatInputProps {
 export interface ChatMessagesProps {
   messages: DisplayMessage[];
   showDebugMessages?: boolean;
+  originalMessages?: SessionMessage[];
 }
 
 /**
