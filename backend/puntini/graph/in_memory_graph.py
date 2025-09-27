@@ -331,12 +331,13 @@ class InMemoryGraphStore:
         
         return results
     
-    def get_subgraph(self, match: MatchSpec, depth: int = 1) -> Dict[str, Any]:
+    def get_subgraph(self, match: MatchSpec, depth: int = 1, direction: str = "all") -> Dict[str, Any]:
         """Retrieve a subgraph around matching nodes.
 
         Args:
             match: Specification for the central nodes of the subgraph.
             depth: Maximum depth of relationships to include (default: 1).
+            direction: Relationship direction ("incoming", "outgoing", "all").
 
         Returns:
             Dictionary containing nodes and edges of the subgraph.
@@ -346,6 +347,8 @@ class InMemoryGraphStore:
         """
         if depth < 0:
             raise ValidationError("Depth must be non-negative")
+        if direction not in ["incoming", "outgoing", "all"]:
+            raise ValidationError("Direction must be 'incoming', 'outgoing', or 'all'")
         
         # Find central nodes
         central_nodes = []
@@ -357,12 +360,11 @@ class InMemoryGraphStore:
             raise NotFoundError(f"No matching nodes found for specification: {match}")
         
         # Collect nodes and edges within depth
-        subgraph_nodes = set()
+        subgraph_nodes = set(node.id for node in central_nodes)
         subgraph_edges = set()
         
         # Start with central nodes
         current_level = central_nodes
-        subgraph_nodes.update(node.id for node in current_level)
         
         # Expand by depth
         for _ in range(depth):
@@ -371,12 +373,25 @@ class InMemoryGraphStore:
             for node in current_level:
                 # Find all edges connected to this node
                 for edge in self._edges.values():
-                    if edge.source_id == node.id or edge.target_id == node.id:
+                    # Outgoing edge
+                    if direction in ["outgoing", "all"] and edge.source_id == node.id:
                         if edge.id not in subgraph_edges:
                             subgraph_edges.add(edge.id)
                             
                             # Add connected nodes
-                            connected_node_id = edge.target_id if edge.source_id == node.id else edge.source_id
+                            connected_node_id = edge.target_id
+                            if connected_node_id not in subgraph_nodes:
+                                connected_node = self._nodes.get(str(connected_node_id))
+                                if connected_node:
+                                    next_level.append(connected_node)
+                                    subgraph_nodes.add(connected_node_id)
+                    # Incoming edge
+                    elif direction in ["incoming", "all"] and edge.target_id == node.id:
+                        if edge.id not in subgraph_edges:
+                            subgraph_edges.add(edge.id)
+
+                            # Add connected nodes
+                            connected_node_id = edge.source_id
                             if connected_node_id not in subgraph_nodes:
                                 connected_node = self._nodes.get(str(connected_node_id))
                                 if connected_node:
@@ -404,17 +419,18 @@ class InMemoryGraphStore:
         for edge_id in subgraph_edges:
             edge = self._edges.get(str(edge_id))
             if edge:
-                result_edges.append({
-                    'id': str(edge.id),
-                    'relationship_type': edge.relationship_type,
-                    'source_id': str(edge.source_id),
-                    'target_id': str(edge.target_id),
-                    'source_key': edge.source_key,
-                    'target_key': edge.target_key,
-                    'source_label': edge.source_label,
-                    'target_label': edge.target_label,
-                    'properties': edge.properties
-                })
+                if edge.source_id in subgraph_nodes and edge.target_id in subgraph_nodes:
+                    result_edges.append({
+                        'id': str(edge.id),
+                        'relationship_type': edge.relationship_type,
+                        'source_id': str(edge.source_id),
+                        'target_id': str(edge.target_id),
+                        'source_key': edge.source_key,
+                        'target_key': edge.target_key,
+                        'source_label': edge.source_label,
+                        'target_label': edge.target_label,
+                        'properties': edge.properties
+                    })
         
         return {
             'nodes': result_nodes,
