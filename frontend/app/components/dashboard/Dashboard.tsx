@@ -5,7 +5,7 @@
  * integrating session management, project context, and task management.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 // import { Button } from '../ui/button';
 import {
@@ -15,6 +15,7 @@ import {
   MessageSquare,
   Settings,
   Users,
+  Network,
 } from "lucide-react";
 import { ChatPage } from "../../chat/ChatPage";
 import { useSession, type SessionInfo } from "@/utils/session";
@@ -22,16 +23,31 @@ import { ProjectContext } from "../project/ProjectContext";
 import { SessionManager } from "../session/SessionManager";
 import { TaskManager } from "../task/TaskManager";
 import { Badge } from "../ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { useAuth } from "../auth/AuthContext";
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { AuthContext } from "../auth/AuthContext";
+import { useContext } from "react";
+import { GraphContainer } from "../graph/GraphContainer";
 
 export const Dashboard: React.FC = () => {
-  const { currentSession } = useSession();
-  const { user } = useAuth();
+  const { currentSession, createSession } = useSession();
+  
+  // Get auth context with defensive check
+  const authContext = useContext(AuthContext);
+  const { user } = authContext || { user: null };
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(
     null
   );
   const [activeTab, setActiveTab] = useState("chat");
+
+
+  // Auto-create a session when Dashboard loads
+  useEffect(() => {
+    if (!currentSession && user) {
+      createSession({ user_id: user.username }).catch(() => {
+        // Failed to create session
+      });
+    }
+  }, [currentSession, createSession, user]);
 
   // Handle session selection
   const handleSessionSelect = (session: SessionInfo) => {
@@ -41,6 +57,18 @@ export const Dashboard: React.FC = () => {
 
   // Get current session for context
   const contextSession = selectedSession || currentSession;
+
+  // Show loading message if auth context is not available
+  if (!authContext) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Loading...</h1>
+          <p className="text-gray-600">Initializing authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -62,69 +90,114 @@ export const Dashboard: React.FC = () => {
               )}
             </div>
             <nav className="flex items-center space-x-4">
-              <a
-                href="#"
+              <button
                 className="text-sm font-medium text-gray-700 hover:text-gray-900"
               >
                 <Settings className="h-5 w-5" />
-              </a>
+              </button>
             </nav>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
+      <main className="w-full px-4 sm:px-6 lg:px-8 py-8 h-[calc(100vh-80px)] flex flex-col">
+        <div className="mb-6 flex-shrink-0">
           <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
           <p className="text-gray-600">
             Manage your business improvement projects and interact with AI agents.
           </p>
+          {contextSession && (
+            <p className="text-xs text-gray-500 mt-1">
+              Session ID: {contextSession.session_id}
+            </p>
+          )}
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="chat" className="flex items-center gap-2">
+        {/* Custom Tab Implementation */}
+        <div className="flex-1 flex flex-col space-y-6 min-h-0 w-full">
+          {/* Tab Navigation */}
+          <div className="grid w-full grid-cols-5 bg-gray-100 p-1 rounded-lg">
+            <button 
+              onClick={() => setActiveTab('chat')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'chat' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'
+              }`}
+            >
               <MessageSquare className="h-4 w-4" />
               Chat
-            </TabsTrigger>
-            <TabsTrigger value="sessions" className="flex items-center gap-2">
+            </button>
+            <button 
+              onClick={() => setActiveTab('sessions')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'sessions' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'
+              }`}
+            >
               <Users className="h-4 w-4" />
               Sessions
-            </TabsTrigger>
-            <TabsTrigger value="tasks" className="flex items-center gap-2">
+            </button>
+            <button 
+              onClick={() => setActiveTab('tasks')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'tasks' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'
+              }`}
+            >
               <CheckSquare className="h-4 w-4" />
               Tasks
-            </TabsTrigger>
-            <TabsTrigger value="context" className="flex items-center gap-2">
+            </button>
+            <button 
+              onClick={() => setActiveTab('graph')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'graph' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'
+              }`}
+            >
+              <Network className="h-4 w-4" />
+              Graph
+            </button>
+            <button 
+              className="flex items-center gap-2 px-4 py-2 rounded-md opacity-50 cursor-not-allowed" 
+              disabled
+            >
               <FolderOpen className="h-4 w-4" />
               Context
-            </TabsTrigger>
-          </TabsList>
+            </button>
+          </div>
 
-          <TabsContent value="chat" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>AI Agent Chat</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ChatPage />
-              </CardContent>
-            </Card>
-          </TabsContent>
+          {/* Tab Content */}
+          <div className="flex-1 flex flex-col min-h-0 w-full">
+            {/* Chat Tab */}
+            <div style={{ display: activeTab === 'chat' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
+              <Card className="flex-1 flex flex-col min-h-0 w-full">
+                <CardHeader className="flex-shrink-0">
+                  <CardTitle>AI Agent Chat</CardTitle>
+                </CardHeader>
+                <CardContent className="flex-1 p-0 min-h-0">
+                  <ChatPage />
+                </CardContent>
+              </Card>
+            </div>
 
-          <TabsContent value="sessions" className="mt-6">
-            <SessionManager onSessionSelect={handleSessionSelect} />
-          </TabsContent>
+            {/* Sessions Tab */}
+            <div style={{ display: activeTab === 'sessions' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
+              <SessionManager onSessionSelect={handleSessionSelect} />
+            </div>
 
-          <TabsContent value="tasks" className="mt-6">
-            <TaskManager sessionId={contextSession?.session_id || null} />
-          </TabsContent>
+            {/* Tasks Tab */}
+            <div style={{ display: activeTab === 'tasks' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
+              <TaskManager sessionId={contextSession?.session_id || "demo-session"} />
+            </div>
 
-          <TabsContent value="context" className="mt-6">
-            <ProjectContext sessionId={contextSession?.session_id || null} />
-          </TabsContent>
-        </Tabs>
+            {/* Graph Tab */}
+            <div style={{ display: activeTab === 'graph' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
+              <GraphContainer />
+            </div>
+
+            {/* Context Tab */}
+            <div style={{ display: activeTab === 'context' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
+              <ProjectContext sessionId={contextSession?.session_id || null} />
+            </div>
+          </div>
+        </div>
       </main>
     </div>
   );

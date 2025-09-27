@@ -8,6 +8,7 @@ langchain-ollama>=0.2.0
 langchain-deepseek
 # Graph database
 neo4j>=5.0.0
+gqlalchemy>=1.4.0
 
 # Observability
 langfuse>=3.0.0

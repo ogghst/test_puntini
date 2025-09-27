@@ -28,7 +28,7 @@ from .models import (
     AssistantResponse,
     Reasoning,
     Debug,
-    
+    StateUpdate,
     Error,
     SessionReady,
     InitSession,
@@ -40,10 +40,11 @@ from .models import (
 )
 from .session import SessionManager, session_manager
 from ..agents.agent_factory import create_simple_agent, create_agent_with_components
-from ..graph.graph_store_factory import create_memory_graph_store
 from ..context.context_manager_factory import create_simple_context_manager
 from ..tools.tool_setup import create_configured_tool_registry
 from ..observability.tracer_factory import create_console_tracer
+from ..orchestration.state_schema import State
+from ..models.goal_schemas import GoalSpec
 
 
 class WebSocketManager:
@@ -65,15 +66,13 @@ class WebSocketManager:
     def _initialize_agent(self) -> None:
         """Initialize the LangGraph agent with components."""
         try:
-            # Create agent components
-            graph_store = create_memory_graph_store()
+            # Create agent components (excluding graph_store which is now per-session)
             context_manager = create_simple_context_manager()
             tool_registry = create_configured_tool_registry()
             tracer = create_console_tracer()
             
             # Create the agent with components
             self.agent = create_agent_with_components(
-                graph_store=graph_store,
                 context_manager=context_manager,
                 tool_registry=tool_registry,
                 tracer=tracer
@@ -129,6 +128,13 @@ class WebSocketManager:
             websocket = self.active_connections[session_id]
             del self.active_connections[session_id]
             
+            # Try to close the WebSocket if it's still open
+            try:
+                if websocket.client_state.name == "CONNECTED":
+                    await websocket.close(code=1000, reason="Server initiated disconnect")
+            except Exception as e:
+                self.logger.debug(f"Error closing WebSocket for session {session_id}: {e}")
+            
             # Find user_id for this session
             user_id = None
             for uid, sessions in self.user_connections.items():
@@ -144,6 +150,21 @@ class WebSocketManager:
             
             self.logger.info(f"WebSocket disconnected: user={user_id}, session={session_id}")
     
+    def is_connection_alive(self, session_id: str) -> bool:
+        """Check if a WebSocket connection is still alive.
+        
+        Args:
+            session_id: Session identifier.
+            
+        Returns:
+            True if connection exists and is in CONNECTED state, False otherwise.
+        """
+        websocket = self.active_connections.get(session_id)
+        if not websocket:
+            return False
+        
+        return websocket.client_state.name == "CONNECTED"
+    
     async def send_message(self, session_id: str, message: Message) -> bool:
         """Send a message to a specific session.
         
@@ -152,18 +173,36 @@ class WebSocketManager:
             message: Message to send.
             
         Returns:
-            True if message was sent, False if connection not found.
+            True if message was sent, False if connection not found or closed.
         """
         websocket = self.active_connections.get(session_id)
         if not websocket:
             return False
         
         try:
+            # Check if WebSocket is still open before sending
+            if websocket.client_state.name != "CONNECTED":
+                self.logger.warning(f"WebSocket connection for session {session_id} is not in CONNECTED state: {websocket.client_state.name}")
+                # Clean up the connection
+                await self.disconnect(session_id)
+                return False
+            
             await websocket.send_text(message.model_dump_json())
-            self.logger.debug(f"Message sent to session {session_id}: {message.type} - {message.model_dump_json()}")
+            self.logger.debug(f"Message sent to session {session_id}: {message.type}")
             return True
+        except RuntimeError as e:
+            if "Cannot call \"send\" once a close message has been sent" in str(e):
+                self.logger.warning(f"WebSocket connection for session {session_id} was closed by client")
+                # Clean up the connection
+                await self.disconnect(session_id)
+                return False
+            else:
+                self.logger.error(f"Runtime error sending message to {session_id}: {e}")
+                return False
         except Exception as e:
             self.logger.error(f"Error sending message to {session_id}: {e}")
+            # Clean up the connection on any other error
+            await self.disconnect(session_id)
             return False
     
     async def send_to_user(self, user_id: str, message: Message) -> int:
@@ -178,13 +217,18 @@ class WebSocketManager:
         """
         session_ids = self.user_connections.get(user_id, set())
         sent_count = 0
+        dead_sessions = []
         
         for session_id in list(session_ids):  # Copy to avoid modification during iteration
             if await self.send_message(session_id, message):
                 sent_count += 1
             else:
-                # Connection is dead, clean up
-                await self.disconnect(session_id)
+                # Connection is dead, mark for cleanup
+                dead_sessions.append(session_id)
+        
+        # Clean up dead sessions
+        for session_id in dead_sessions:
+            await self.disconnect(session_id)
         
         return sent_count
     
@@ -308,27 +352,33 @@ class WebSocketManager:
             # Send reasoning message
             reasoning = Reasoning.create(
                 steps=[
-                    "Received user prompt",
-                    "Processing with LangGraph agent",
-                    "Generating response"
+                    "Starting user prompt processing.."
                 ],
                 session_id=session_id
             )
             await self.send_message(session_id, reasoning)
             
             # Create initial state for agent
-            from ..orchestration.state import State
+            from ..orchestration.state_schema import State
             from ..agents.agent_factory import create_initial_state
             
             # Get components from the agent
             components = getattr(self.agent, '_components', {})
-            graph_store = components.get('graph_store')
             context_manager = components.get('context_manager')
             tool_registry = components.get('tool_registry')
             tracer = components.get('tracer')
             
-            if not all([graph_store, context_manager, tool_registry, tracer]):
+            if not all([context_manager, tool_registry, tracer]):
                 raise ValueError("Agent components not properly initialized")
+            
+            # Get graph store from session
+            session_data = self.session_manager.get_session(session_id)
+            if not session_data:
+                raise ValueError("Session not found")
+            
+            graph_store = session_data.graph_store
+            if not graph_store:
+                raise ValueError("Graph store not available in session")
             
             # Create LLM for the graph context (like in CLI)
             from ..llm.llm_models import LLMFactory
@@ -338,7 +388,6 @@ class WebSocketManager:
             # Create initial state
             initial_state = create_initial_state(
                 goal=message.data.get("prompt", ""),
-                graph_store=graph_store,
                 context_manager=context_manager,
                 tool_registry=tool_registry,
                 tracer=tracer
@@ -369,7 +418,7 @@ class WebSocketManager:
             }
             
             # Stream agent execution with context
-            async for chunk in self.agent.astream(initial_state, stream_mode=["updates", "custom", "events", "messages-tuple"], context=context, config=config):
+            async for chunk in self.agent.astream(initial_state, stream_mode=["values"], context=context, config=config):
                 await self._handle_agent_chunk(session_id, chunk)
             
             # Send completion message
@@ -408,12 +457,116 @@ class WebSocketManager:
                 elif mode == "custom":
                     # Handle custom data
                     await self._handle_custom_data(session_id, data)
+                elif mode == "values":
+                    # Handle values
+                    await self._handle_values(session_id, data)
             else:
                 # Handle single chunk
                 await self._handle_single_chunk(session_id, chunk)
                 
         except Exception as e:
             self.logger.error(f"Error handling agent chunk for session {session_id}: {e}")
+            
+            
+    async def _handle_values(self, session_id: str, data: State) -> None:
+        """Handle agent values.
+        
+        Args:
+            session_id: Session identifier.
+            data: Values data.
+        """
+        try:
+            # Extract goal_spec properly - it should be Optional[GoalSpec]
+            goal_spec_data = data.get("goal_spec")
+            goal_spec: Optional[GoalSpec] = None
+            if goal_spec_data:
+                try:
+                    goal_spec = GoalSpec.model_validate(goal_spec_data)
+                except Exception as e:
+                    self.logger.warning(f"Failed to validate goal_spec: {e}")
+        
+            # Extract current_step as string (not dict)
+            current_step = data.get("current_step", "unknown")
+            
+            # Extract todo_list as List[TodoItem] and convert to dict format for StateUpdate
+            todo_list_data = data.get("todo_list", [])
+            todo_list = []
+            for todo_item in todo_list_data:
+                if isinstance(todo_item, dict):
+                    todo_list.append({
+                        'description': todo_item.get('description', ''),
+                        'status': todo_item.get('status', 'planned'),
+                        'step_number': todo_item.get('step_number'),
+                        'tool_name': todo_item.get('tool_name'),
+                        'estimated_complexity': todo_item.get('estimated_complexity', 'medium')
+                    })
+                else:
+                    # Handle TodoItem objects
+                    todo_list.append({
+                        'description': getattr(todo_item, 'description', ''),
+                        'status': getattr(todo_item, 'status', 'planned'),
+                        'step_number': getattr(todo_item, 'step_number', None),
+                        'tool_name': getattr(todo_item, 'tool_name', None),
+                        'estimated_complexity': getattr(todo_item, 'estimated_complexity', 'medium')
+                    })
+            
+            # Extract entities created from goal_spec if available
+            entities_created = []
+            if goal_spec and hasattr(goal_spec, 'entities'):
+                for entity in goal_spec.entities:
+                    entities_created.append({
+                        'name': entity.name,
+                        'type': entity.type.value if hasattr(entity.type, 'value') else str(entity.type),
+                        'label': entity.label,
+                        'properties': entity.properties,
+                        'confidence': entity.confidence
+                    })
+            
+            progress = data.get("progress", [])
+            failures = data.get("failures", [])
+
+            state_update = StateUpdate.create(
+                update_type='values',
+                current_step=current_step,
+                todo_list=todo_list,
+                entities_created=entities_created,
+                session_id=session_id,
+                progress=progress,
+                failures=failures
+            )
+
+            await self.send_message(session_id, state_update)
+        except Exception as e:
+            self.logger.error(f"Error handling values for session {session_id}: {e}")
+            debug = Debug.create(
+                message=f"Error handling values for session {session_id}: {e}",
+                level="error",
+                session_id=session_id
+            )
+            await self.send_message(session_id, debug)
+        
+        
+        # Check if this is a parse_goal update
+        if 'goal_spec' in data and data['goal_spec']:
+            try:
+                goal_spec_obj = GoalSpec.model_validate(data['goal_spec'])
+                await self._handle_state_update(session_id, {'goal_spec': goal_spec_obj})
+            except Exception as e:
+                self.logger.warning(f"Failed to validate goal_spec in parse_goal update: {e}")
+                debug = Debug.create(
+                    message=f"Failed to parse goal_spec: {str(e)}",
+                    level="warning",
+                    session_id=session_id
+                )
+                await self.send_message(session_id, debug)
+        else:
+            # Send debug message about state update for other types
+            debug = Debug.create(
+                message=f"Agent state updated: {list(data.keys())}",
+                level="info",
+                session_id=session_id
+            )
+            await self.send_message(session_id, debug)
     
     async def _handle_state_update(self, session_id: str, data: Dict[str, Any]) -> None:
         """Handle agent state update.
@@ -422,13 +575,68 @@ class WebSocketManager:
             session_id: Session identifier.
             data: State update data.
         """
-        # Send debug message about state update
-        debug = Debug.create(
-            message=f"Agent state updated: {list(data.keys())}",
-            level="info",
-            session_id=session_id
-        )
-        await self.send_message(session_id, debug)
+        # Check if this is a parse_goal update
+        if 'parse_goal' in data:
+            await self._handle_parse_goal_update(session_id, data.get('parse_goal', {}))
+        else:
+            # Send debug message about state update for other types
+            debug = Debug.create(
+                message=f"Agent state updated: {list(data.keys())}",
+                level="info",
+                session_id=session_id
+            )
+            await self.send_message(session_id, debug)
+       
+    
+    async def _handle_parse_goal_update(self, session_id: str, parse_goal_data: Dict[str, Any]) -> None:
+        """Handle parse_goal state update with structured information.
+        
+        Args:
+            session_id: Session identifier.
+            data: State update data containing parse_goal information.
+        """
+        try:
+          
+            # Extract current step
+            current_step = parse_goal_data.get('current_step', 'unknown')
+            
+            # Extract todo list with status
+            todo_list = []
+
+            for todo_item in parse_goal_data.get('todo_list', []):
+                todo_list.append({
+                    'description': todo_item.get('description', ''),
+                    'status': todo_item.get('status', 'planned'),
+                    'step_number': todo_item.get('step_number'),
+                    'tool_name': todo_item.get('tool_name'),
+                    'estimated_complexity': todo_item.get('estimated_complexity', 'medium')
+                })
+            
+            # Extract entities created
+            entities_created = []
+            
+            # Create structured state update message
+            state_update = StateUpdate.create(
+                update_type='parse_goal',
+                current_step=current_step,
+                todo_list=todo_list,
+                entities_created=entities_created,
+                session_id=session_id,
+                progress=parse_goal_data.get('progress', []),
+                artifacts=parse_goal_data.get('artifacts', []),
+                failures=parse_goal_data.get('failures', [])
+            )
+            
+            await self.send_message(session_id, state_update)
+            
+        except Exception as e:
+            # Fallback to debug message if parsing fails
+            debug = Debug.create(
+                message=f"Error parsing parse_goal update: {str(e)}",
+                level="error",
+                session_id=session_id
+            )
+            await self.send_message(session_id, debug)
     
     async def _handle_custom_data(self, session_id: str, data: Dict[str, Any]) -> None:
         """Handle custom data from agent.
@@ -489,12 +697,18 @@ class WebSocketManager:
             Number of connections the message was sent to.
         """
         sent_count = 0
+        dead_sessions = []
+        
         for session_id in list(self.active_connections.keys()):
             if await self.send_message(session_id, message):
                 sent_count += 1
             else:
-                # Connection is dead, clean up
-                await self.disconnect(session_id)
+                # Connection is dead, mark for cleanup
+                dead_sessions.append(session_id)
+        
+        # Clean up dead sessions
+        for session_id in dead_sessions:
+            await self.disconnect(session_id)
         
         return sent_count
     

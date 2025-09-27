@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router";
+import { useNavigate } from "react-router";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "../ui/card";
@@ -19,13 +19,14 @@ export function LoginPage() {
     try {
       if (isLogin) {
         await login(username, password);
+        // Navigate after successful login
+        navigate("/dashboard");
       } else {
         await register(username, password);
         // After registration, switch to login mode
         setIsLogin(true);
       }
-      navigate("/dashboard");
-    } catch (err) {
+    } catch {
       // Error is handled by the auth context
     }
   };
