@@ -273,48 +273,6 @@ def test():
 
 
 @cli.command()
-@click.option("--create-default-users", is_flag=True, default=True, help="Create default users (admin and user)")
-@click.option("--no-default-users", is_flag=True, help="Skip creating default users")
-@click.option("--reset", is_flag=True, help="Reset database (WARNING: deletes all data!)")
-@click.option("--health-check", is_flag=True, help="Check database health")
-def init_db(create_default_users: bool, no_default_users: bool, reset: bool, health_check: bool):
-    """Initialize the database with tables and default data.
-    
-    Args:
-        create_default_users: Whether to create default users.
-        no_default_users: Skip creating default users.
-        reset: Reset database (WARNING: deletes all data!).
-        health_check: Check database health.
-    """
-    import asyncio
-    from puntini.database.init_db import initialize_database, reset_database, check_database_health
-    
-    if health_check:
-        click.echo("🔍 Checking database health...")
-        result = asyncio.run(check_database_health())
-        if result:
-            click.echo("✅ Database health check passed")
-            return
-        else:
-            click.echo("❌ Database health check failed")
-            sys.exit(1)
-    
-    if reset:
-        if click.confirm("⚠️  This will delete ALL data in the database. Are you sure?"):
-            click.echo("🔄 Resetting database...")
-            asyncio.run(reset_database())
-            click.echo("✅ Database reset completed")
-        else:
-            click.echo("❌ Database reset cancelled")
-        return
-    
-    click.echo("🚀 Initializing database...")
-    create_users = create_default_users and not no_default_users
-    asyncio.run(initialize_database(create_users))
-    click.echo("✅ Database initialization completed")
-
-
-@cli.command()
 @click.option("--output", "-o", help="Output file for the example")
 def example(output: str | None):
     """Generate an example configuration file.

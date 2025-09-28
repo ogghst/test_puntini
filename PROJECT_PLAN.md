@@ -54,7 +54,7 @@ This document outlines the implementation plan for adding missing features to th
 ### Phase 1: Database Layer & User Management (Priority: High)
 
 #### 1.1 Database Abstraction Layer
-**Libraries**: SQLAlchemy 2.0, aiosqlite, alembic
+**Libraries**: SQLAlchemy 2.0, aiosqlite, alembic, bcrypt
 
 **Implementation**:
 ```python
@@ -63,64 +63,193 @@ This document outlines the implementation plan for adding missing features to th
   ├── __init__.py
   ├── base.py              # Database base configuration
   ├── session.py           # Async session management
+  ├── db.py                # Centralized ORM operations (ALL database functions)
   ├── models/
   │   ├── __init__.py
   │   ├── user.py          # User model
   │   ├── session.py       # Session model
   │   ├── role.py          # Role model
   │   └── user_role.py     # User-Role association
-  ├── repositories/
-  │   ├── __init__.py
-  │   ├── base.py          # Base repository
-  │   ├── user.py          # User repository
-  │   └── session.py       # Session repository
-  └── migrations/
-      └── alembic/         # Database migrations
+  ├── migrations/
+  │   └── alembic/         # Database migrations
+  └── init_db.py           # Database initialization script
 ```
 
 **Features**:
 - Async SQLAlchemy 2.0 setup with aiosqlite
-- User model with authentication fields
+- User model with authentication fields (username, email, password_hash, is_active, is_admin)
 - Session model for agent state persistence
-- Role-based access control (RBAC)
-- Repository pattern for data access
+- Role-based access control (RBAC) with admin/user roles
+- **Centralized ORM operations in `db.py`** - ALL database functions must be implemented here
+- **API endpoints MUST use functions from `db.py`** - no direct ORM calls in API layer
+- **Database configuration through `config.json`** - location and settings managed via config
+- **Default database location**: `database/puntini.db`
 - Database migrations with Alembic
 - Database initialization script with default users
 
-#### 1.1.1 Database Initialization Script
+#### 1.1.1 Centralized Database Operations (`db.py`)
 **Implementation**:
 ```python
-# New files:
-/puntini/database/
-  ├── init_db.py            # Database initialization script
-  ├── seed_data.py          # Default data seeding
-  └── scripts/
-      └── create_default_users.py  # User creation script
+# Centralized database operations file:
+/puntini/database/db.py
+```
+
+**Required Functions**:
+```python
+# User Operations
+async def create_user(username: str, email: str, password: str, is_admin: bool = False) -> User
+async def get_user_by_id(user_id: int) -> User | None
+async def get_user_by_username(username: str) -> User | None
+async def get_user_by_email(email: str) -> User | None
+async def update_user(user_id: int, **updates) -> User | None
+async def delete_user(user_id: int) -> bool
+async def list_users(skip: int = 0, limit: int = 100, is_active: bool = None) -> List[User]
+async def authenticate_user(username: str, password: str) -> User | None
+async def change_user_password(user_id: int, new_password: str) -> bool
+async def activate_user(user_id: int) -> bool
+async def deactivate_user(user_id: int) -> bool
+
+# Session Operations
+async def create_session(user_id: int, session_data: dict) -> Session
+async def get_session_by_id(session_id: int) -> Session | None
+async def get_user_sessions(user_id: int) -> List[Session]
+async def update_session(session_id: int, session_data: dict) -> Session | None
+async def delete_session(session_id: int) -> bool
+async def cleanup_expired_sessions() -> int
+
+# Role Operations
+async def create_role(name: str, description: str = "") -> Role
+async def get_role_by_name(name: str) -> Role | None
+async def assign_role_to_user(user_id: int, role_name: str) -> bool
+async def revoke_role_from_user(user_id: int, role_name: str) -> bool
+async def get_user_roles(user_id: int) -> List[Role]
+
+# Admin Operations
+async def get_admin_users() -> List[User]
+async def get_system_stats() -> dict
+async def get_user_activity_stats() -> dict
+async def bulk_update_users(user_ids: List[int], **updates) -> int
+```
+
+**Architecture Rules**:
+- **ALL database operations MUST be implemented in `db.py`**
+- **NO direct ORM calls allowed in API endpoints**
+- **API endpoints MUST import and use functions from `db.py`**
+- **All functions must be async and use proper error handling**
+- **All functions must return typed results**
+- **Transaction management handled within `db.py` functions**
+
+#### 1.1.2 Database Configuration
+**Implementation**:
+```python
+# Database configuration in config.json:
+{
+  "database": {
+    "type": "sqlite",
+    "location": "database/puntini.db",
+    "echo": false,
+    "pool_size": 5,
+    "max_overflow": 10,
+    "pool_timeout": 30,
+    "pool_recycle": 3600,
+    "pool_pre_ping": true
+  }
+}
+```
+
+**Configuration Options**:
+- **`type`**: Database type ("sqlite", "postgresql", "mysql")
+- **`location`**: Database file path (default: "database/puntini.db")
+- **`echo`**: Enable SQL query logging (default: false)
+- **`pool_size`**: Connection pool size (default: 5)
+- **`max_overflow`**: Maximum overflow connections (default: 10)
+- **`pool_timeout`**: Connection timeout in seconds (default: 30)
+- **`pool_recycle`**: Connection recycle time in seconds (default: 3600)
+- **`pool_pre_ping`**: Enable connection pre-ping (default: true)
+
+**Database Path Resolution**:
+- **Default path**: `database/puntini.db` (relative to project root)
+- **Absolute paths**: Supported for custom locations
+- **Environment override**: `DATABASE_URL` environment variable takes precedence
+- **Auto-creation**: Database directory created automatically if it doesn't exist
+
+**Integration with Existing Config**:
+```json
+// Current config.json structure (backend/config.json)
+{
+  "langfuse": { ... },
+  "llm": { ... },
+  "neo4j": { ... },
+  "memgraph": { ... },
+  "agent": { ... },
+  "server": { ... },
+  "logging": { ... },
+  "database": {
+    "type": "sqlite",
+    "location": "database/puntini.db",
+    "echo": false,
+    "pool_size": 5,
+    "max_overflow": 10,
+    "pool_timeout": 30,
+    "pool_recycle": 3600,
+    "pool_pre_ping": true
+  }
+}
+```
+
+**Configuration Loading**:
+```python
+# Database configuration loading in db.py
+from ..utils.settings import Settings
+
+def get_database_url() -> str:
+    """Get database URL from config.json or environment"""
+    settings = Settings()
+    db_config = settings.database
+    
+    if db_config.get("type") == "sqlite":
+        location = db_config.get("location", "database/puntini.db")
+        return f"sqlite+aiosqlite:///{location}"
+    elif db_config.get("type") == "postgresql":
+        # PostgreSQL configuration
+        return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{database}"
+    # Add other database types as needed
+```
+
+#### 1.1.3 Database Initialization Script
+**Implementation**:
+```python
+# Database initialization script:
+/puntini/database/init_db.py
 ```
 
 **Features**:
-- Database schema creation and migration
-- Default admin user creation (username: admin, password: admin123)
-- Default standard user creation (username: user, password: user123)
+- Database schema creation and migration using Alembic
+- Default admin user creation (username: admin, password: admin)
+- Default standard user creation (username: user, password: user)
 - Role assignment (admin role for admin user, user role for standard user)
 - Password hashing with bcrypt
-- Initial role creation (admin, user, guest)
+- Initial role creation (admin, user)
+- **All operations use functions from `db.py`** (no direct ORM calls)
+- **Database location configured via `config.json`** (default: database/puntini.db)
 
 **Default Users Created**:
 ```python
 # Admin User
 username: "admin"
 email: "admin@puntini.dev"
-password: "admin123"  # Must be changed on first login
+password: "admin"  # Must be changed on first login
+is_admin: True
+is_active: True
 role: "admin"
-permissions: ["user_management", "role_management", "system_admin"]
 
 # Standard User  
 username: "user"
 email: "user@puntini.dev"
-password: "user123"   # Must be changed on first login
+password: "user"   # Must be changed on first login
+is_admin: False
+is_active: True
 role: "user"
-permissions: ["basic_access", "session_management"]
 ```
 
 **Initialization Script Usage**:
@@ -152,6 +281,7 @@ puntini init-db --create-default-users
 - Admin-only user management endpoints
 - Admin-only role management endpoints
 - Admin dashboard data endpoints
+- **ALL API endpoints MUST use functions from `db.py`** (no direct ORM calls)
 
 #### 1.2.1 Admin API Endpoints
 **Implementation**:
@@ -173,6 +303,7 @@ puntini init-db --create-default-users
 - Reset user passwords
 - View user activity logs
 - Bulk user operations
+- **All operations use functions from `db.py`** (no direct ORM calls)
 
 **Admin Role Management Features**:
 - List all roles and permissions
@@ -189,6 +320,47 @@ puntini init-db --create-default-users
 - Recent user registrations
 - Failed login attempts
 - Session analytics
+
+#### 1.2.2 API Implementation Pattern
+**Example API Endpoint Implementation**:
+```python
+# /puntini/api/users.py
+from fastapi import APIRouter, Depends, HTTPException
+from ..database.db import create_user, get_user_by_id, list_users, update_user
+from ..database.models.user import User
+
+router = APIRouter()
+
+@router.post("/users/", response_model=User)
+async def create_user_endpoint(user_data: UserCreate):
+    """Create a new user - MUST use db.py function"""
+    return await create_user(
+        username=user_data.username,
+        email=user_data.email,
+        password=user_data.password,
+        is_admin=user_data.is_admin
+    )
+
+@router.get("/users/{user_id}", response_model=User)
+async def get_user_endpoint(user_id: int):
+    """Get user by ID - MUST use db.py function"""
+    user = await get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+@router.get("/users/", response_model=List[User])
+async def list_users_endpoint(skip: int = 0, limit: int = 100):
+    """List users - MUST use db.py function"""
+    return await list_users(skip=skip, limit=limit)
+```
+
+**Architecture Enforcement**:
+- **NO direct SQLAlchemy imports in API files**
+- **NO direct model instantiation in API files**
+- **NO direct session usage in API files**
+- **ALL database operations MUST go through `db.py` functions**
+- **API files are thin wrappers around `db.py` functions**
 
 #### 1.3 Frontend User Management
 **Implementation**:
@@ -615,6 +787,10 @@ puntini init-db --create-default-users
 - [ ] Admin users can manage other users and roles
 - [ ] Role-based access control prevents unauthorized access
 - [ ] Admin dashboard provides system overview and analytics
+- [ ] **ALL database operations centralized in `db.py`**
+- [ ] **NO direct ORM calls in API endpoints**
+- [ ] **Database configuration managed via `config.json`**
+- [ ] **Default database location**: `database/puntini.db`
 - [ ] Neo4j graph operations work with MERGE semantics
 - [ ] Human-in-the-loop escalation functions correctly
 - [ ] Progressive context disclosure improves performance
@@ -641,7 +817,9 @@ puntini init-db --create-default-users
 1. **Immediate Actions**:
    - Set up development database (SQLite)
    - Install required dependencies (SQLAlchemy, neo4j driver, bcrypt)
+   - **Configure database settings in `config.json`** (default: database/puntini.db)
    - Create database models and migrations
+   - **Implement centralized `db.py` with all ORM operations**
    - Implement database initialization script with default users
    - Begin Phase 1 implementation
 
