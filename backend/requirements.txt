@@ -39,4 +39,9 @@ python-jose[cryptography]>=3.3.0
 bcrypt>=4.2.1
 python-multipart>=0.0.6
 
+# Database dependencies
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+aiosqlite>=0.20.0
+
 

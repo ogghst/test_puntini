@@ -7,7 +7,7 @@ set -e  # Exit on any error
 echo "=== Puntini Backend Docker Test ==="
 
 # Navigate to backend directory
-cd /home/nicola/dev/test_puntini/backend
+cd ../backend
 
 # Clean up any existing test containers
 echo "Cleaning up existing containers..."

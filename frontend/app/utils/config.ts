@@ -2,10 +2,8 @@
  * Configuration management utility for the frontend application.
  * 
  * This module provides a centralized configuration system that loads settings
- * from a JSON configuration file and supports environment variable overrides.
+ * from environment variables with fallback defaults.
  */
-
-import configData from '../../config.json';
 
 // Configuration interfaces
 export interface ApiConfig {
@@ -57,13 +55,46 @@ export interface AppConfig {
   development: DevelopmentConfig;
 }
 
-// Environment variable overrides
-interface EnvironmentOverrides {
+// Environment variable interface
+interface EnvironmentVariables {
+  // API Configuration
   VITE_API_BASE_URL?: string;
+  VITE_API_TIMEOUT?: string;
+  VITE_API_RETRY_ATTEMPTS?: string;
+  VITE_API_RETRY_DELAY?: string;
+  
+  // WebSocket Configuration
   VITE_WS_BASE_URL?: string;
-  VITE_DEBUG_MODE?: string;
-  VITE_ANALYTICS_ENABLED?: string;
+  VITE_WS_RECONNECT_ATTEMPTS?: string;
+  VITE_WS_RECONNECT_DELAY?: string;
+  VITE_WS_HEARTBEAT_INTERVAL?: string;
+  VITE_WS_CONNECTION_TIMEOUT?: string;
+  
+  // Authentication Configuration
+  VITE_AUTH_TOKEN_STORAGE_KEY?: string;
+  VITE_AUTH_USER_STORAGE_KEY?: string;
+  VITE_AUTH_TOKEN_EXPIRY_BUFFER?: string;
+  
+  // UI Configuration
+  VITE_UI_THEME?: string;
+  VITE_UI_LANGUAGE?: string;
+  VITE_UI_AUTO_SAVE?: string;
+  VITE_UI_AUTO_SAVE_INTERVAL?: string;
+  
+  // Feature Flags
+  VITE_FEATURES_DEBUG_MODE?: string;
+  VITE_FEATURES_ANALYTICS_ENABLED?: string;
+  VITE_FEATURES_OFFLINE_MODE?: string;
+  VITE_FEATURES_PUSH_NOTIFICATIONS?: string;
+  
+  // Development Configuration
+  VITE_DEV_HOT_RELOAD?: string;
+  VITE_DEV_SOURCE_MAPS?: string;
+  VITE_DEV_CONSOLE_LOGGING?: string;
+  
+  // Application Environment
   NODE_ENV?: string;
+  VITE_APP_ENV?: string;
 }
 
 /**
@@ -71,53 +102,108 @@ interface EnvironmentOverrides {
  */
 class ConfigManager {
   private config: AppConfig;
-  private environment: EnvironmentOverrides;
+  private environment: EnvironmentVariables;
 
   constructor() {
     this.environment = {
+      // API Configuration
       VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
+      VITE_API_TIMEOUT: import.meta.env.VITE_API_TIMEOUT,
+      VITE_API_RETRY_ATTEMPTS: import.meta.env.VITE_API_RETRY_ATTEMPTS,
+      VITE_API_RETRY_DELAY: import.meta.env.VITE_API_RETRY_DELAY,
+      
+      // WebSocket Configuration
       VITE_WS_BASE_URL: import.meta.env.VITE_WS_BASE_URL,
-      VITE_DEBUG_MODE: import.meta.env.VITE_DEBUG_MODE,
-      VITE_ANALYTICS_ENABLED: import.meta.env.VITE_ANALYTICS_ENABLED,
+      VITE_WS_RECONNECT_ATTEMPTS: import.meta.env.VITE_WS_RECONNECT_ATTEMPTS,
+      VITE_WS_RECONNECT_DELAY: import.meta.env.VITE_WS_RECONNECT_DELAY,
+      VITE_WS_HEARTBEAT_INTERVAL: import.meta.env.VITE_WS_HEARTBEAT_INTERVAL,
+      VITE_WS_CONNECTION_TIMEOUT: import.meta.env.VITE_WS_CONNECTION_TIMEOUT,
+      
+      // Authentication Configuration
+      VITE_AUTH_TOKEN_STORAGE_KEY: import.meta.env.VITE_AUTH_TOKEN_STORAGE_KEY,
+      VITE_AUTH_USER_STORAGE_KEY: import.meta.env.VITE_AUTH_USER_STORAGE_KEY,
+      VITE_AUTH_TOKEN_EXPIRY_BUFFER: import.meta.env.VITE_AUTH_TOKEN_EXPIRY_BUFFER,
+      
+      // UI Configuration
+      VITE_UI_THEME: import.meta.env.VITE_UI_THEME,
+      VITE_UI_LANGUAGE: import.meta.env.VITE_UI_LANGUAGE,
+      VITE_UI_AUTO_SAVE: import.meta.env.VITE_UI_AUTO_SAVE,
+      VITE_UI_AUTO_SAVE_INTERVAL: import.meta.env.VITE_UI_AUTO_SAVE_INTERVAL,
+      
+      // Feature Flags
+      VITE_FEATURES_DEBUG_MODE: import.meta.env.VITE_FEATURES_DEBUG_MODE,
+      VITE_FEATURES_ANALYTICS_ENABLED: import.meta.env.VITE_FEATURES_ANALYTICS_ENABLED,
+      VITE_FEATURES_OFFLINE_MODE: import.meta.env.VITE_FEATURES_OFFLINE_MODE,
+      VITE_FEATURES_PUSH_NOTIFICATIONS: import.meta.env.VITE_FEATURES_PUSH_NOTIFICATIONS,
+      
+      // Development Configuration
+      VITE_DEV_HOT_RELOAD: import.meta.env.VITE_DEV_HOT_RELOAD,
+      VITE_DEV_SOURCE_MAPS: import.meta.env.VITE_DEV_SOURCE_MAPS,
+      VITE_DEV_CONSOLE_LOGGING: import.meta.env.VITE_DEV_CONSOLE_LOGGING,
+      
+      // Application Environment
       NODE_ENV: import.meta.env.NODE_ENV,
+      VITE_APP_ENV: import.meta.env.VITE_APP_ENV,
     };
 
-    // Load and merge configuration
+    // Load configuration from environment variables
     this.config = this.loadConfiguration();
   }
 
   /**
-   * Load configuration with environment variable overrides
+   * Load configuration from environment variables with fallback defaults
    */
   private loadConfiguration(): AppConfig {
-    const baseConfig = configData as AppConfig;
-
-    // Apply environment variable overrides
-    const mergedConfig: AppConfig = {
-      ...baseConfig,
+    const config: AppConfig = {
       api: {
-        ...baseConfig.api,
         baseUrl: this.environment.VITE_API_BASE_URL || "http://localhost:8009",
+        timeout: this.parseInt(this.environment.VITE_API_TIMEOUT, 30000),
+        retryAttempts: this.parseInt(this.environment.VITE_API_RETRY_ATTEMPTS, 3),
+        retryDelay: this.parseInt(this.environment.VITE_API_RETRY_DELAY, 1000),
+      },
+      websocket: {
+        reconnectAttempts: this.parseInt(this.environment.VITE_WS_RECONNECT_ATTEMPTS, 5),
+        reconnectDelay: this.parseInt(this.environment.VITE_WS_RECONNECT_DELAY, 2000),
+        heartbeatInterval: this.parseInt(this.environment.VITE_WS_HEARTBEAT_INTERVAL, 30000),
+        connectionTimeout: this.parseInt(this.environment.VITE_WS_CONNECTION_TIMEOUT, 10000),
+      },
+      auth: {
+        tokenStorageKey: this.environment.VITE_AUTH_TOKEN_STORAGE_KEY || "authToken",
+        userStorageKey: this.environment.VITE_AUTH_USER_STORAGE_KEY || "authUser",
+        tokenExpiryBuffer: this.parseInt(this.environment.VITE_AUTH_TOKEN_EXPIRY_BUFFER, 300000),
+      },
+      ui: {
+        theme: (this.environment.VITE_UI_THEME as 'light' | 'dark' | 'auto') || "light",
+        language: this.environment.VITE_UI_LANGUAGE || "en",
+        autoSave: this.parseBoolean(this.environment.VITE_UI_AUTO_SAVE, true),
+        autoSaveInterval: this.parseInt(this.environment.VITE_UI_AUTO_SAVE_INTERVAL, 30000),
       },
       features: {
-        ...baseConfig.features,
-        enableDebugMode: this.parseBoolean(String(baseConfig.features.enableDebugMode),
-          false
-        ),
-        enableAnalytics: this.parseBoolean(String(baseConfig.features.enableAnalytics),
-          false
-        ),
+        enableDebugMode: this.parseBoolean(this.environment.VITE_FEATURES_DEBUG_MODE, false),
+        enableAnalytics: this.parseBoolean(this.environment.VITE_FEATURES_ANALYTICS_ENABLED, false),
+        enableOfflineMode: this.parseBoolean(this.environment.VITE_FEATURES_OFFLINE_MODE, false),
+        enablePushNotifications: this.parseBoolean(this.environment.VITE_FEATURES_PUSH_NOTIFICATIONS, false),
       },
       development: {
-        ...baseConfig.development,
-        enableConsoleLogging: this.isDevelopmentMode() ? true : baseConfig.development.enableConsoleLogging,
+        enableHotReload: this.parseBoolean(this.environment.VITE_DEV_HOT_RELOAD, true),
+        enableSourceMaps: this.parseBoolean(this.environment.VITE_DEV_SOURCE_MAPS, true),
+        enableConsoleLogging: this.parseBoolean(this.environment.VITE_DEV_CONSOLE_LOGGING, false),
       },
     };
 
     // Validate configuration
-    this.validateConfiguration(mergedConfig);
+    this.validateConfiguration(config);
 
-    return mergedConfig;
+    return config;
+  }
+
+  /**
+   * Parse integer environment variable
+   */
+  private parseInt(value: string | undefined, defaultValue: number): number {
+    if (value === undefined) return defaultValue;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? defaultValue : parsed;
   }
 
   /**
@@ -222,9 +308,8 @@ class ConfigManager {
    * Get WebSocket URL
    */
   getWebSocketUrl(): string {
-    const wsBaseUrl = this.environment.VITE_WS_BASE_URL || 
-                     this.config.api.baseUrl.replace(/^http/, 'ws');
-    return wsBaseUrl;
+    return this.environment.VITE_WS_BASE_URL || 
+           this.config.api.baseUrl.replace(/^http/, 'ws');
   }
 
   /**

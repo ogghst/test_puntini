@@ -4,7 +4,7 @@
     "public_key": "your_secret_key_here",
     "host": "http://langfuse:3000",
     "debug": false,
-    "tracing_enabled": true,
+    "tracing_enabled": false,
     "sample_rate": 1.0,
     "environment": "production",
     "release": "v1.0.0",
@@ -12,12 +12,12 @@
     "user_id": ""
   },
   "llm": {
-    "default_llm": "ollama-gemma3:4b",
+    "default_llm": "deepseek",
     "providers": [
       {
         "name": "deepseek",
         "type": "deepseek",
-        "api_key": "your_secret_key_here",
+        "api_key": "redacted",
         "model_name": "deepseek-chat",
         "temperature": 0.1,
         "max_tokens": 2000,
@@ -93,8 +93,8 @@
     "log_level": "INFO",
     "console_logging": true,
     "max_bytes": 10485760,
-    "backup_count": 5,
-    "log_file": "puntini.log",
-    "logs_path": "logs"
+    "backup_count": 1,
+    "log_file": "puntini_backend.log",
+    "logs_path": "../logs"
   }
 }

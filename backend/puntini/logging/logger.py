@@ -131,6 +131,8 @@ class LoggingService:
             
             self._handlers.append(file_handler)
         
+        
+        """
         # Error file handler
         error_file = logs_path / "error.log"
         existing_error_handlers = [
@@ -151,6 +153,8 @@ class LoggingService:
             root_logger.addHandler(error_handler)
             
             self._handlers.append(error_handler)
+        """
+        
         
     def _setup_console_handler(self) -> None:
         """Setup console handler for development."""
