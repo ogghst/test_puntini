@@ -7,7 +7,8 @@ set -e  # Exit on any error
 echo "=== Puntini Backend Docker Test ==="
 
 # Navigate to backend directory
-cd ../backend
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/../backend"
 
 # Clean up any existing test containers
 echo "Cleaning up existing containers..."
