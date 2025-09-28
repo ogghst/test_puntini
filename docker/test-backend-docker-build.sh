@@ -6,7 +6,8 @@ echo "Testing backend Docker build..."
 
 # Build the Docker image
 echo "Building Docker image..."
-cd /home/nicola/dev/test_puntini/backend
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/../backend"
 sudo docker build -t puntini-backend-test .
 
 if [ $? -eq 0 ]; then
