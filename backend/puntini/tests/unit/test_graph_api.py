@@ -63,13 +63,13 @@ class TestGraphAPI:
         
         return store
 
-    @patch('puntini.api.app.make_graph_store')
-    @patch('puntini.api.app.Settings')
-    def test_get_graph_data_success(self, mock_settings, mock_make_graph_store, client, mock_graph_store):
+    @patch('puntini.api.app.session_manager')
+    def test_get_graph_data_success(self, mock_session_manager, client, mock_graph_store):
         """Test successful graph data retrieval."""
         # Setup mocks
-        mock_settings.return_value.get_graph_store_config.return_value = {"kind": "memory"}
-        mock_make_graph_store.return_value = mock_graph_store
+        mock_session = Mock()
+        mock_session.graph_store = mock_graph_store
+        mock_session_manager.get_user_sessions.return_value = [mock_session]
         
         # Make request
         response = client.get("/graph")
@@ -102,13 +102,15 @@ class TestGraphAPI:
         assert "source_id" in edge_data
         assert "target_id" in edge_data
 
-    @patch('puntini.api.app.make_graph_store')
-    @patch('puntini.api.app.Settings')
-    def test_get_graph_data_error(self, mock_settings, mock_make_graph_store, client):
+    @patch('puntini.api.app.session_manager')
+    def test_get_graph_data_error(self, mock_session_manager, client):
         """Test graph data retrieval error handling."""
         # Setup mocks to raise exception
-        mock_settings.return_value.get_graph_store_config.return_value = {"kind": "memory"}
-        mock_make_graph_store.side_effect = Exception("Graph store error")
+        mock_graph_store = Mock()
+        mock_graph_store.get_all_nodes.side_effect = Exception("Graph store error")
+        mock_session = Mock()
+        mock_session.graph_store = mock_graph_store
+        mock_session_manager.get_user_sessions.return_value = [mock_session]
         
         # Make request
         response = client.get("/graph")
@@ -119,13 +121,13 @@ class TestGraphAPI:
         assert "detail" in data
         assert "Failed to retrieve graph data" in data["detail"]
 
-    @patch('puntini.api.app.make_graph_store')
-    @patch('puntini.api.app.Settings')
-    def test_get_subgraph_success(self, mock_settings, mock_make_graph_store, client, mock_graph_store):
+    @patch('puntini.api.app.session_manager')
+    def test_get_subgraph_success(self, mock_session_manager, client, mock_graph_store):
         """Test successful subgraph retrieval."""
         # Setup mocks
-        mock_settings.return_value.get_graph_store_config.return_value = {"kind": "memory"}
-        mock_make_graph_store.return_value = mock_graph_store
+        mock_session = Mock()
+        mock_session.graph_store = mock_graph_store
+        mock_session_manager.get_user_sessions.return_value = [mock_session]
         
         # Make request
         request_data = {

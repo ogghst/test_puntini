@@ -454,3 +454,5 @@ Located at `.github/workflows/frontend-docker.yml`, this workflow:
 There is also a `.github/workflows/docker-publish.yml` workflow that publishes the backend Docker image to Docker Hub.
 
 All workflows use Docker Buildx for efficient building and caching.
+
+

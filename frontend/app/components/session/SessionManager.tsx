@@ -10,8 +10,6 @@ import {
   AlertCircle,
   Clock,
   Eye,
-  Plus,
-  RefreshCw,
   Trash2,
   Users,
 } from "lucide-react";
@@ -71,14 +69,22 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     }
   }, []);
 
-  // Load data on component mount
+  // Load data on component mount and set up polling
   useEffect(() => {
     // Add a small delay to ensure authentication is ready
-    const timer = setTimeout(() => {
+    const initialTimer = setTimeout(() => {
       loadData();
     }, 100);
     
-    return () => clearTimeout(timer);
+    // Set up polling every 30 seconds
+    const pollingInterval = setInterval(() => {
+      loadData();
+    }, 30000);
+    
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(pollingInterval);
+    };
   }, [loadData]);
 
   // Refresh current session
@@ -93,32 +99,6 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     }
   };
 
-  // Create new session
-  const handleCreateSession = async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const newSession = await SessionAPI.createSession({
-        user_id: user?.username || "testuser", // Use the authenticated user
-        metadata: { source: "session_manager" },
-      });
-
-      await loadData(); // Reload sessions
-
-      if (onSessionSelect) {
-        onSessionSelect(newSession);
-      }
-    } catch (err) {
-      const apiError =
-        err instanceof SessionAPIError
-          ? err
-          : new SessionAPIError("Failed to create session");
-      setError(apiError.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // Destroy session
   const handleDestroySession = async (sessionId: string) => {
@@ -187,23 +167,6 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
             Manage user sessions and monitor activity
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadData(0)}
-            disabled={isLoading}
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
-            />
-            Refresh
-          </Button>
-          <Button size="sm" onClick={handleCreateSession} disabled={isLoading}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Session
-          </Button>
-        </div>
       </div>
 
       {/* Error Display */}
@@ -220,7 +183,6 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                   onClick={() => loadData(0)}
                   disabled={isLoading}
                 >
-                  <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? "animate-spin" : ""}`} />
                   Retry
                 </Button>
                 <Button
@@ -241,7 +203,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
         <Card className="border-blue-200 bg-blue-50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-blue-800">
-              <RefreshCw className="h-4 w-4 animate-spin" />
+              <div className="h-4 w-4 animate-spin border-2 border-blue-300 border-t-blue-600 rounded-full" />
               <span>Loading session data...</span>
             </div>
           </CardContent>
@@ -332,7 +294,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                   size="sm"
                   onClick={handleRefreshSession}
                 >
-                  <RefreshCw className="h-4 w-4" />
+                  ↻
                 </Button>
               </div>
             </div>
@@ -436,17 +398,9 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                 <div className="text-center py-8 text-gray-500">
                   <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                   <p className="text-lg font-medium mb-2">No sessions found</p>
-                  <p className="text-sm mb-4">
-                    Create your first session to start working with the Puntini Agent
+                  <p className="text-sm">
+                    Sessions will appear here when they are created
                   </p>
-                  <Button
-                    onClick={handleCreateSession}
-                    disabled={isLoading}
-                    className="mt-2"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create First Session
-                  </Button>
                 </div>
               )}
             </div>

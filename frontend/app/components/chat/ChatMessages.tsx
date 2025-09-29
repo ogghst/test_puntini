@@ -19,25 +19,33 @@ import { type Message as SessionMessage } from "@/utils/session";
  */
 export const ChatMessages: React.FC<ChatMessagesProps> = ({ 
   messages, 
-  showDebugMessages = true,
+  showDebugMessages = false,
   originalMessages = []
 }) => {
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-    }
+    const scrollToBottom = () => {
+      if (scrollAreaRef.current) {
+        // Find the scrollable viewport within ScrollArea
+        const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+        if (viewport) {
+          viewport.scrollTop = viewport.scrollHeight;
+        }
+      }
+    };
+
+    // Use setTimeout to ensure DOM has been updated
+    const timeoutId = setTimeout(scrollToBottom, 0);
+    
+    return () => clearTimeout(timeoutId);
   }, [messages]);
 
   return (
     <div className="h-full w-full flex flex-col">
-      <ScrollArea className="flex-1 w-full">
-        <div 
-          ref={scrollContainerRef}
-          className="space-y-4 p-4 w-full"
-        >
+      <ScrollArea ref={scrollAreaRef} className="flex-1 w-full">
+        <div className="space-y-4 p-4 w-full">
           {messages.map((message, index) => (
             <ChatMessage
               key={message.id}

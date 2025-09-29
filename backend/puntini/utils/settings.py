@@ -129,6 +129,19 @@ class ServerConfig:
 
 
 @dataclass
+class DatabaseConfig:
+    """Configuration for database settings."""
+    type: str = "sqlite"
+    location: str = "../../database/puntini.db"
+    echo: bool = False
+    pool_size: int = 5
+    max_overflow: int = 10
+    pool_timeout: int = 30
+    pool_recycle: int = 3600
+    pool_pre_ping: bool = True
+
+
+@dataclass
 class DevelopmentConfig:
     """Configuration for development and debugging."""
     debug: bool = False
@@ -178,6 +191,7 @@ class Settings:
         
         self.neo4j = Neo4jConfig(**config.get('neo4j', {}))
         self.agent = AgentConfig(**config.get('agent', {}))
+        self.database = DatabaseConfig(**config.get('database', {}))
         self.logging = LoggingConfig(**config.get('logging', {}))
         self.server = ServerConfig(**config.get('server', {}))
         self.dev = DevelopmentConfig(**config.get('dev', {}))

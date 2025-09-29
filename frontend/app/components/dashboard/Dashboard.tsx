@@ -1,11 +1,11 @@
 /**
  * Main Dashboard Component
  *
- * Provides the main interface for the business improvement project management system,
+ * Provides the main interface for the puntini system,
  * integrating session management, project context, and task management.
  */
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 // import { Button } from '../ui/button';
 import {
@@ -27,9 +27,10 @@ import { Badge } from "../ui/badge";
 import { AuthContext } from "../auth/AuthContext";
 import { useContext } from "react";
 import { GraphContainer } from "../graph/GraphContainer";
+import { Status } from "../status/Status";
 
 export const Dashboard: React.FC = () => {
-  const { currentSession, createSession } = useSession();
+  const { currentSession } = useSession();
   
   // Get auth context with defensive check
   const authContext = useContext(AuthContext);
@@ -40,14 +41,6 @@ export const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState("chat");
 
 
-  // Auto-create a session when Dashboard loads
-  useEffect(() => {
-    if (!currentSession && user) {
-      createSession({ user_id: user.username }).catch(() => {
-        // Failed to create session
-      });
-    }
-  }, [currentSession, createSession, user]);
 
   // Handle session selection
   const handleSessionSelect = (session: SessionInfo) => {
@@ -80,7 +73,7 @@ export const Dashboard: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Activity className="h-8 w-8 text-blue-600" />
                 <h1 className="text-xl font-bold text-gray-900">
-                  Business Improvement Project Management
+                  Puntini
                 </h1>
               </div>
               {user && (
@@ -167,14 +160,24 @@ export const Dashboard: React.FC = () => {
           <div className="flex-1 flex flex-col min-h-0 w-full">
             {/* Chat Tab */}
             <div style={{ display: activeTab === 'chat' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
-              <Card className="flex-1 flex flex-col min-h-0 w-full">
-                <CardHeader className="flex-shrink-0">
-                  <CardTitle>AI Agent Chat</CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 p-0 min-h-0">
-                  <ChatPage />
-                </CardContent>
-              </Card>
+              <div className="flex-1 flex gap-6 min-h-0 w-full">
+                {/* Chat Section - Left Side */}
+                <div className="flex-1 flex flex-col min-h-0">
+                  <Card className="flex-1 flex flex-col min-h-0">
+                    <CardHeader className="flex-shrink-0">
+                      <CardTitle>AI Agent Chat</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex-1 p-0 min-h-0">
+                      <ChatPage />
+                    </CardContent>
+                  </Card>
+                </div>
+                
+                {/* Status Section - Right Side */}
+                <div className="flex-1 flex flex-col min-h-0">
+                  <Status sessionId={contextSession?.session_id || null} />
+                </div>
+              </div>
             </div>
 
             {/* Sessions Tab */}
@@ -191,6 +194,7 @@ export const Dashboard: React.FC = () => {
             <div style={{ display: activeTab === 'graph' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
               <GraphContainer />
             </div>
+
 
             {/* Context Tab */}
             <div style={{ display: activeTab === 'context' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">

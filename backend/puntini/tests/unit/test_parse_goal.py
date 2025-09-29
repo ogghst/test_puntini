@@ -30,10 +30,18 @@ class TestParseGoal:
         with pytest.raises(ValidationError, match="Goal cannot be empty"):
             parse_goal(state)
     
-    @patch('puntini.nodes.parse_goal.ChatOpenAI')
+    @patch('puntini.nodes.parse_goal.get_runtime')
     @patch('puntini.nodes.parse_goal.ChatPromptTemplate')
-    def test_parse_goal_success(self, mock_prompt, mock_llm):
+    def test_parse_goal_success(self, mock_prompt, mock_get_runtime):
         """Test successful goal parsing with mocked LLM."""
+        # Mock LLM and runtime
+        mock_llm = Mock()
+        mock_structured_llm = Mock()
+        mock_llm.with_structured_output.return_value = mock_structured_llm
+        mock_runtime = Mock()
+        mock_runtime.context = {'llm': mock_llm}
+        mock_get_runtime.return_value = mock_runtime
+
         # Mock the LLM response
         mock_goal_spec = GoalSpec(
             original_goal="Create a person node",
@@ -55,12 +63,7 @@ class TestParseGoal:
             parsing_notes=["Successfully parsed simple goal"]
         )
         
-        # Mock the LLM chain
-        mock_structured_llm = Mock()
         mock_structured_llm.invoke.return_value = mock_goal_spec
-        mock_llm_instance = Mock()
-        mock_llm_instance.with_structured_output.return_value = mock_structured_llm
-        mock_llm.return_value = mock_llm_instance
         
         # Mock the prompt template
         mock_chain = Mock()
@@ -72,69 +75,80 @@ class TestParseGoal:
             "current_attempt": 1
         }
         
-        result = parse_goal(state)
+        result = parse_goal(state, runtime=mock_runtime)
         
         # Verify the result structure
-        assert result["current_step"] == "route_tool"  # Simple goal should skip planning
-        assert result["current_attempt"] == 1
-        assert result["result"]["status"] == "success"
-        assert result["result"]["complexity"] == GoalComplexity.SIMPLE
-        assert result["result"]["is_simple"] is True
-        assert len(result["progress"]) > 0
-        assert len(result["artifacts"]) > 0
+        assert result.current_step == "plan_step"
+        assert result.current_attempt == 1
+        assert result.result.status == "success"
+        assert result.result.complexity == GoalComplexity.SIMPLE.value
+        assert result.result.is_simple is True
+        assert len(result.progress) > 0
         
         # Verify LLM was called
-        mock_llm.assert_called_once()
-        mock_structured_llm.invoke.assert_called_once()
+        mock_llm.with_structured_output.assert_called_once()
+        mock_chain.invoke.assert_called_once()
     
-    @patch('puntini.nodes.parse_goal.ChatOpenAI')
-    def test_parse_goal_llm_error_first_attempt(self, mock_llm):
+    @patch('puntini.nodes.parse_goal.get_runtime')
+    def test_parse_goal_llm_error_first_attempt(self, mock_get_runtime):
         """Test handling of LLM errors on first attempt."""
         # Mock LLM to raise an exception
-        mock_llm_instance = Mock()
-        mock_llm_instance.with_structured_output.side_effect = Exception("LLM connection failed")
-        mock_llm.return_value = mock_llm_instance
-        
+        mock_llm = Mock()
+        mock_llm.with_structured_output.side_effect = Exception("LLM connection failed")
+        mock_runtime = Mock()
+        mock_runtime.context = {'llm': mock_llm}
+        mock_get_runtime.return_value = mock_runtime
+
         state = {
             "goal": "Create a person node",
             "current_attempt": 1
         }
         
-        result = parse_goal(state)
+        result = parse_goal(state, runtime=mock_runtime)
         
         # Should route to diagnose on first attempt failure
-        assert result["current_step"] == "diagnose"
-        assert result["current_attempt"] == 2
-        assert result["result"]["status"] == "error"
-        assert result["result"]["error_type"] == "parsing_error"
-        assert len(result["failures"]) == 1
+        assert result.current_step == "diagnose"
+        assert result.current_attempt == 2
+        assert result.result.status == "error"
+        assert result.result.error_type == "network_error"
+        assert len(result.failures) == 1
     
-    @patch('puntini.nodes.parse_goal.ChatOpenAI')
-    def test_parse_goal_llm_error_retry_attempt(self, mock_llm):
+    @patch('puntini.nodes.parse_goal.get_runtime')
+    def test_parse_goal_llm_error_retry_attempt(self, mock_get_runtime):
         """Test handling of LLM errors on retry attempt."""
         # Mock LLM to raise an exception
-        mock_llm_instance = Mock()
-        mock_llm_instance.with_structured_output.side_effect = Exception("LLM connection failed")
-        mock_llm.return_value = mock_llm_instance
+        mock_llm = Mock()
+        mock_llm.with_structured_output.side_effect = Exception("LLM connection failed")
+        mock_runtime = Mock()
+        mock_runtime.context = {'llm': mock_llm}
+        mock_get_runtime.return_value = mock_runtime
         
         state = {
             "goal": "Create a person node",
             "current_attempt": 2
         }
         
-        result = parse_goal(state)
+        result = parse_goal(state, runtime=mock_runtime)
         
         # Should escalate after retry failure
-        assert result["current_step"] == "escalate"
-        assert result["current_attempt"] == 2
-        assert result["result"]["status"] == "error"
-        assert result["result"]["error_type"] == "parsing_error"
-        assert len(result["failures"]) == 1
+        assert result.current_step == "escalate"
+        assert result.current_attempt == 2
+        assert result.result.status == "error"
+        assert result.result.error_type == "network_error"
+        assert len(result.failures) == 1
     
-    @patch('puntini.nodes.parse_goal.ChatOpenAI')
+    @patch('puntini.nodes.parse_goal.get_runtime')
     @patch('puntini.nodes.parse_goal.ChatPromptTemplate')
-    def test_parse_goal_validation_error(self, mock_prompt, mock_llm):
+    def test_parse_goal_validation_error(self, mock_prompt, mock_get_runtime):
         """Test handling of validation errors in parsed goal."""
+        # Mock LLM and runtime
+        mock_llm = Mock()
+        mock_structured_llm = Mock()
+        mock_llm.with_structured_output.return_value = mock_structured_llm
+        mock_runtime = Mock()
+        mock_runtime.context = {'llm': mock_llm}
+        mock_get_runtime.return_value = mock_runtime
+
         # Mock the LLM response with invalid data
         mock_goal_spec = GoalSpec(
             original_goal="Create a person node",
@@ -150,12 +164,7 @@ class TestParseGoal:
             parsing_notes=[]
         )
         
-        # Mock the LLM chain
-        mock_structured_llm = Mock()
         mock_structured_llm.invoke.return_value = mock_goal_spec
-        mock_llm_instance = Mock()
-        mock_llm_instance.with_structured_output.return_value = mock_structured_llm
-        mock_llm.return_value = mock_llm_instance
         
         # Mock the prompt template
         mock_chain = Mock()
@@ -167,19 +176,19 @@ class TestParseGoal:
             "current_attempt": 1
         }
         
-        result = parse_goal(state)
+        result = parse_goal(state, runtime=mock_runtime)
         
-        # Should handle validation error gracefully
-        assert result["current_step"] == "diagnose"
-        assert result["result"]["status"] == "error"
-        assert "Could not extract meaningful entities or intent" in result["result"]["error"]
+        # Should handle validation error gracefully by escalating
+        assert result.current_step == "escalate"
+        assert result.result.status == "error"
+        assert "Could not extract meaningful entities or intent" in result.result.error
 
 
 class TestDetermineNextStep:
     """Test cases for the _determine_next_step function."""
     
-    def test_simple_goal_routes_to_route_tool(self):
-        """Test that simple goals route directly to route_tool."""
+    def test_all_goals_route_to_plan_step(self):
+        """Test that all goals are routed to the planning step."""
         goal_spec = GoalSpec(
             original_goal="Create a node",
             intent="Create a simple node",
@@ -193,54 +202,6 @@ class TestDetermineNextStep:
             requires_human_input=False,
             priority="medium",
             confidence=0.9,
-            parsing_notes=[]
-        )
-        
-        next_step = _determine_next_step(goal_spec, 1)
-        assert next_step == "route_tool"
-    
-    def test_medium_complexity_routes_to_plan_step(self):
-        """Test that medium complexity goals route to plan_step."""
-        goal_spec = GoalSpec(
-            original_goal="Create a complex graph",
-            intent="Create a complex graph structure",
-            complexity=GoalComplexity.MEDIUM,
-            entities=[
-                EntitySpec(name="node1", type=EntityType.NODE),
-                EntitySpec(name="node2", type=EntityType.NODE),
-                EntitySpec(name="edge", type=EntityType.EDGE)
-            ],
-            constraints=[],
-            domain_hints=[],
-            estimated_steps=3,
-            requires_human_input=False,
-            priority="medium",
-            confidence=0.8,
-            parsing_notes=[]
-        )
-        
-        next_step = _determine_next_step(goal_spec, 1)
-        assert next_step == "plan_step"
-    
-    def test_complex_goal_routes_to_plan_step(self):
-        """Test that complex goals route to plan_step."""
-        goal_spec = GoalSpec(
-            original_goal="Create a very complex multi-step graph",
-            intent="Create a complex multi-step graph",
-            complexity=GoalComplexity.COMPLEX,
-            entities=[
-                EntitySpec(name="node1", type=EntityType.NODE),
-                EntitySpec(name="node2", type=EntityType.NODE),
-                EntitySpec(name="node3", type=EntityType.NODE),
-                EntitySpec(name="edge1", type=EntityType.EDGE),
-                EntitySpec(name="edge2", type=EntityType.EDGE)
-            ],
-            constraints=[],
-            domain_hints=[],
-            estimated_steps=5,
-            requires_human_input=False,
-            priority="high",
-            confidence=0.7,
             parsing_notes=[]
         )
         

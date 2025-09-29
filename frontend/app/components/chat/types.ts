@@ -98,7 +98,7 @@ export interface ChatMessagesProps {
  * Message transformation utilities
  */
 export interface MessageTransformers {
-  sessionToDisplay: (msg: SessionMessage) => DisplayMessage;
+  sessionToDisplay: (msg: SessionMessage) => DisplayMessage | null;
   getAvatarForSource: (source: MessageSource) => string;
   getCardColorForSource: (source: MessageSource) => string;
 }

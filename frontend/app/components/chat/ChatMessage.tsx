@@ -22,7 +22,7 @@ import { type Message as SessionMessage, type StateUpdateData } from "@/utils/se
  */
 export const ChatMessage: React.FC<ChatMessageProps> = ({ 
   message, 
-  showDebugMessages = true,
+  showDebugMessages = false,
   originalMessage
 }) => {
 

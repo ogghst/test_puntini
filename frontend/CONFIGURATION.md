@@ -1,76 +1,78 @@
 # Frontend Configuration System
 
-This document describes the robust configuration system implemented for the frontend application.
+This document describes the environment variable-based configuration system implemented for the frontend application.
 
 ## Overview
 
-The frontend uses a centralized configuration system that combines:
-- JSON configuration file (`config.json`) as the base configuration
-- Environment variables for environment-specific overrides
-- Type-safe configuration management with validation
+The frontend uses a centralized configuration system that loads settings from environment variables with fallback defaults. This approach provides maximum flexibility for different deployment environments without requiring code changes.
 
 ## Configuration Files
 
-### 1. Base Configuration (`config.json`)
+### 1. Environment Files
 
-The main configuration file containing default settings:
+The configuration system uses environment files for different deployment scenarios:
 
-```json
-{
-  "api": {
-    "baseUrl": "http://localhost:8000",
-    "timeout": 30000,
-    "retryAttempts": 3,
-    "retryDelay": 1000
-  },
-  "websocket": {
-    "reconnectAttempts": 5,
-    "reconnectDelay": 2000,
-    "heartbeatInterval": 30000,
-    "connectionTimeout": 10000
-  },
-  "auth": {
-    "tokenStorageKey": "authToken",
-    "userStorageKey": "authUser",
-    "tokenExpiryBuffer": 300000
-  },
-  "ui": {
-    "theme": "light",
-    "language": "en",
-    "autoSave": true,
-    "autoSaveInterval": 30000
-  },
-  "features": {
-    "enableDebugMode": false,
-    "enableAnalytics": false,
-    "enableOfflineMode": false,
-    "enablePushNotifications": false
-  },
-  "development": {
-    "enableHotReload": true,
-    "enableSourceMaps": true,
-    "enableConsoleLogging": true
-  }
-}
-```
-
-### 2. Environment Files
-
-- `env.example` - Template for environment variables
-- `env.development` - Development environment settings
-- `env.production` - Production environment settings
+- `.env.example` - Template for environment variables with documentation
+- `.env.development` - Development environment settings
+- `.env.production` - Production environment settings
+- `.env.local` - Local overrides (not committed to version control)
 
 ## Environment Variables
 
-The following environment variables can override configuration settings:
+The following environment variables control all application settings:
 
+### API Configuration
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `VITE_API_BASE_URL` | API base URL | `http://localhost:8000` |
-| `VITE_WS_BASE_URL` | WebSocket base URL | `ws://localhost:8000` |
-| `VITE_DEBUG_MODE` | Enable debug mode | `false` |
-| `VITE_ANALYTICS_ENABLED` | Enable analytics | `false` |
-| `NODE_ENV` | Environment mode | `development` |
+| `VITE_API_BASE_URL` | API base URL | `http://localhost:8009` |
+| `VITE_API_TIMEOUT` | API request timeout (ms) | `30000` |
+| `VITE_API_RETRY_ATTEMPTS` | Number of retry attempts | `3` |
+| `VITE_API_RETRY_DELAY` | Delay between retries (ms) | `1000` |
+
+### WebSocket Configuration
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_WS_BASE_URL` | WebSocket base URL | Auto-derived from API URL |
+| `VITE_WS_RECONNECT_ATTEMPTS` | Reconnection attempts | `5` |
+| `VITE_WS_RECONNECT_DELAY` | Delay between reconnections (ms) | `2000` |
+| `VITE_WS_HEARTBEAT_INTERVAL` | Heartbeat interval (ms) | `30000` |
+| `VITE_WS_CONNECTION_TIMEOUT` | Connection timeout (ms) | `10000` |
+
+### Authentication Configuration
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_AUTH_TOKEN_STORAGE_KEY` | LocalStorage key for auth token | `authToken` |
+| `VITE_AUTH_USER_STORAGE_KEY` | LocalStorage key for user data | `authUser` |
+| `VITE_AUTH_TOKEN_EXPIRY_BUFFER` | Token expiry buffer (ms) | `300000` |
+
+### UI Configuration
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_UI_THEME` | Theme (`light`, `dark`, `auto`) | `light` |
+| `VITE_UI_LANGUAGE` | Language code | `en` |
+| `VITE_UI_AUTO_SAVE` | Enable auto-save | `true` |
+| `VITE_UI_AUTO_SAVE_INTERVAL` | Auto-save interval (ms) | `30000` |
+
+### Feature Flags
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_FEATURES_DEBUG_MODE` | Enable debug mode | `false` |
+| `VITE_FEATURES_ANALYTICS_ENABLED` | Enable analytics | `false` |
+| `VITE_FEATURES_OFFLINE_MODE` | Enable offline mode | `false` |
+| `VITE_FEATURES_PUSH_NOTIFICATIONS` | Enable push notifications | `false` |
+
+### Development Configuration
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_DEV_HOT_RELOAD` | Enable hot reload | `true` |
+| `VITE_DEV_SOURCE_MAPS` | Enable source maps | `true` |
+| `VITE_DEV_CONSOLE_LOGGING` | Enable console logging | `false` |
+
+### Application Environment
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NODE_ENV` | Node environment | `development` |
+| `VITE_APP_ENV` | Application environment | `development` |
 
 ## Usage
 
@@ -118,11 +120,12 @@ if (config.isAnalyticsEnabled()) {
 
 ```bash
 # Copy the example file
-cp env.example .env.local
+cp .env.example .env.local
 
 # Edit .env.local
-VITE_API_BASE_URL=http://localhost:8000
-VITE_DEBUG_MODE=true
+VITE_API_BASE_URL=http://localhost:8009
+VITE_FEATURES_DEBUG_MODE=true
+VITE_DEV_CONSOLE_LOGGING=true
 ```
 
 #### Production
@@ -131,8 +134,21 @@ VITE_DEBUG_MODE=true
 # Set environment variables
 export VITE_API_BASE_URL=https://api.yourdomain.com
 export VITE_WS_BASE_URL=wss://api.yourdomain.com
-export VITE_DEBUG_MODE=false
-export VITE_ANALYTICS_ENABLED=true
+export VITE_FEATURES_DEBUG_MODE=false
+export VITE_FEATURES_ANALYTICS_ENABLED=true
+export VITE_DEV_CONSOLE_LOGGING=false
+```
+
+#### Docker
+
+```bash
+# Run container with environment variables
+docker run -d --name puntini-frontend \
+  -p 8026:8026 \
+  -e VITE_API_BASE_URL=http://backend:8025 \
+  -e VITE_FEATURES_DEBUG_MODE=false \
+  -e VITE_FEATURES_ANALYTICS_ENABLED=true \
+  puntini-frontend:latest
 ```
 
 ## Configuration Features
@@ -158,12 +174,12 @@ Configuration is validated on load:
 - Timeout values must be positive
 - Reconnect attempts must be non-negative
 
-### 3. Environment Variable Overrides
+### 3. Environment Variable Priority
 
-Environment variables automatically override JSON configuration:
+Environment variables take precedence over defaults:
 
 ```typescript
-// JSON config: "baseUrl": "http://localhost:8000"
+// Default: baseUrl = "http://localhost:8009"
 // Environment: VITE_API_BASE_URL=https://api.production.com
 // Result: baseUrl = "https://api.production.com"
 ```
@@ -174,8 +190,8 @@ When debug mode is enabled, configuration is logged to console:
 
 ```
 🔧 Application Configuration
-  API Base URL: http://localhost:8000
-  WebSocket URL: ws://localhost:8000
+  API Base URL: http://localhost:8009
+  WebSocket URL: ws://localhost:8009
   Debug Mode: true
   Analytics: false
   Development: true
@@ -260,28 +276,39 @@ export default defineConfig(({ mode }) => {
 
 ### Configuration Not Loading
 
-1. Check that `config.json` exists and is valid JSON
-2. Verify environment variables are prefixed with `VITE_`
+1. Check that environment variables are prefixed with `VITE_`
+2. Verify environment variables are set correctly
 3. Check browser console for configuration errors
+4. Ensure `.env` files are in the project root
 
 ### Environment Variables Not Working
 
 1. Ensure variables start with `VITE_` prefix
 2. Restart the development server after adding new variables
 3. Check that `.env` files are in the project root
+4. Verify variable names match exactly (case-sensitive)
 
 ### WebSocket Connection Issues
 
 1. Verify WebSocket URL configuration
 2. Check that the backend supports WebSocket connections
 3. Ensure proper CORS configuration on the backend
+4. Verify `VITE_WS_BASE_URL` is set correctly
 
-## Migration from Hardcoded Values
+### Docker Configuration Issues
 
-If migrating from hardcoded configuration:
+1. Check that environment variables are passed to the container
+2. Verify the Dockerfile includes all necessary ENV declarations
+3. Ensure environment variables are set before building the image
+4. Check container logs for configuration errors
 
-1. Identify all hardcoded URLs and settings
-2. Add them to `config.json`
+## Migration from JSON Configuration
+
+If migrating from JSON-based configuration:
+
+1. Identify all configuration values from `config.json`
+2. Create corresponding environment variables with `VITE_` prefix
 3. Update components to use `config.getApiUrl()` instead of hardcoded strings
-4. Add environment variable support for deployment flexibility
+4. Set up environment files for different deployment environments
 5. Test configuration in different environments
+6. Remove the old `config.json` file

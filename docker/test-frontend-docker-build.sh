@@ -1,20 +1,21 @@
 #!/bin/bash
 
-# Test script for building and running the backend Docker image
+# Test script for building and running the frontend Docker image
 
-echo "Testing backend Docker build..."
+echo "Testing frontend Docker build..."
 
 # Build the Docker image
 echo "Building Docker image..."
-cd /home/nicola/dev/test_puntini/backend
-sudo docker build -t puntini-backend-test .
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/../frontend"
+sudo docker build -t puntini-frontend-test .
 
 if [ $? -eq 0 ]; then
     echo "Docker build successful!"
     
     # Run the container
     echo "Running container..."
-    sudo docker run --rm -p 8025:8025 puntini-backend-test
+    sudo docker run --rm -p 8026:8026 puntini-frontend-test
     
     if [ $? -eq 0 ]; then
         echo "Container ran successfully!"

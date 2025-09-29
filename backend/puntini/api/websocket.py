@@ -61,6 +61,7 @@ class WebSocketManager:
         self.user_connections: Dict[str, Set[str]] = {}  # user_id -> set of session_ids
         self.agent: StateGraph = None
         self.logger = get_logger(__name__)
+        self.running_tasks: Dict[str, asyncio.Task] = {}  # session_id -> task
         self._initialize_agent()
     
     def _initialize_agent(self) -> None:
@@ -127,6 +128,14 @@ class WebSocketManager:
         if session_id in self.active_connections:
             websocket = self.active_connections[session_id]
             del self.active_connections[session_id]
+            
+            # Cancel any running agent tasks for this session
+            if session_id in self.running_tasks:
+                task = self.running_tasks[session_id]
+                if not task.done():
+                    task.cancel()
+                    self.logger.info(f"Cancelled running agent task for session {session_id}")
+                del self.running_tasks[session_id]
             
             # Try to close the WebSocket if it's still open
             try:
@@ -348,7 +357,51 @@ class WebSocketManager:
             session_id: Session identifier.
             message: User prompt message.
         """
+        # Check if there's already a running task for this session
+        if session_id in self.running_tasks:
+            self.logger.warning(f"Agent task already running for session {session_id}")
+            error_message = Error.create(
+                code=429,
+                message="Agent is already processing a request. Please wait.",
+                session_id=session_id
+            )
+            await self.send_message(session_id, error_message)
+            return
+        
+        # Create background task to prevent blocking the WebSocket event loop
+        # Add timeout to prevent hanging tasks
         try:
+            task = asyncio.create_task(self._run_agent_task(session_id, message))
+            self.running_tasks[session_id] = task
+            
+            await asyncio.wait_for(task, timeout=300.0)  # 5 minute timeout
+            
+        except asyncio.TimeoutError:
+            self.logger.warning(f"Agent task timed out for session {session_id}")
+            if self.is_connection_alive(session_id):
+                error_message = Error.create(
+                    code=408,
+                    message="Agent processing timed out. Please try again.",
+                    session_id=session_id
+                )
+                await self.send_message(session_id, error_message)
+        finally:
+            # Clean up task tracking
+            self.running_tasks.pop(session_id, None)
+    
+    async def _run_agent_task(self, session_id: str, message: UserPrompt) -> None:
+        """Run agent processing in a background task.
+        
+        Args:
+            session_id: Session identifier.
+            message: User prompt message.
+        """
+        try:
+            # Check if connection is still alive before starting
+            if not self.is_connection_alive(session_id):
+                self.logger.info(f"Connection closed for session {session_id}, skipping agent processing")
+                return
+            
             # Send reasoning message
             reasoning = Reasoning.create(
                 steps=[
@@ -356,7 +409,9 @@ class WebSocketManager:
                 ],
                 session_id=session_id
             )
-            await self.send_message(session_id, reasoning)
+            sent = await self.send_message(session_id, reasoning)
+            if not sent:
+                return  # Connection closed, stop processing
             
             # Create initial state for agent
             from ..orchestration.state_schema import State
@@ -419,23 +474,37 @@ class WebSocketManager:
             
             # Stream agent execution with context
             async for chunk in self.agent.astream(initial_state, stream_mode=["values"], context=context, config=config):
+                # Check if connection is still alive before processing each chunk
+                if not self.is_connection_alive(session_id):
+                    self.logger.info(f"Connection closed for session {session_id}, stopping agent processing")
+                    return
                 await self._handle_agent_chunk(session_id, chunk)
             
-            # Send completion message
-            completion = AssistantResponse.create(
-                text="Agent processing completed.",
-                session_id=session_id
-            )
-            await self.send_message(session_id, completion)
+            # Send completion message only if connection is still alive
+            if self.is_connection_alive(session_id):
+                completion = AssistantResponse.create(
+                    text="Agent processing completed.",
+                    session_id=session_id
+                )
+                await self.send_message(session_id, completion)
             
+        except asyncio.CancelledError:
+            self.logger.info(f"Agent task cancelled for session {session_id}")
+            # Don't send error message for cancelled tasks
+            raise  # Re-raise to properly handle cancellation
         except Exception as e:
             self.logger.error(f"Error processing with agent for session {session_id}: {e}")
-            error_message = Error.create(
-                code=500,
-                message=f"Agent processing error: {str(e)}",
-                session_id=session_id
-            )
-            await self.send_message(session_id, error_message)
+            # Only send error message if connection is still alive
+            if self.is_connection_alive(session_id):
+                error_message = Error.create(
+                    code=500,
+                    message=f"Agent processing error: {str(e)}",
+                    session_id=session_id
+                )
+                try:
+                    await self.send_message(session_id, error_message)
+                except Exception as send_error:
+                    self.logger.warning(f"Failed to send error message for session {session_id}: {send_error}")
     
     async def _handle_agent_chunk(self, session_id: str, chunk: Any) -> None:
         """Handle a chunk from agent streaming.
@@ -444,6 +513,10 @@ class WebSocketManager:
             session_id: Session identifier.
             chunk: Agent streaming chunk.
         """
+        # Check if connection is still alive before processing chunk
+        if not self.is_connection_alive(session_id):
+            self.logger.info(f"Connection closed for session {session_id}, skipping chunk processing")
+            return
         
         self.logger.info(f"Agent chunk: {chunk}")
         

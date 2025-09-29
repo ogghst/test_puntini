@@ -4,7 +4,7 @@ import type { Route } from "./+types/login";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Login - Business Improvement Project Management" },
+    { title: "Login - Puntini" },
     {
       name: "description",
       content: "Login to your account",
