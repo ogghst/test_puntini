@@ -12,11 +12,11 @@ import type { Route } from "./+types/home";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Business Improvement Project Management" },
+    { title: "Puntini" },
     {
       name: "description",
       content:
-        "AI-powered project management for business improvement initiatives",
+        "AI-powered system for knowledge graph manipulation",
     },
   ];
 }
@@ -35,7 +35,7 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 <Activity className="h-8 w-8 text-blue-600" />
                 <h1 className="text-xl font-bold text-gray-900">
-                  Business Improvement Project Management
+                  Puntini
                 </h1>
               </div>
               <div className="flex items-center gap-4">
@@ -62,12 +62,10 @@ export default function Home() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="text-center mb-12">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Welcome to Business Improvement Project Management
+              Welcome to Puntini
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Leverage AI agents to manage your business improvement projects
-              with intelligent project planning, task management, and real-time
-              collaboration.
+              Leverage AI agents to manage your knowledge graphs
             </p>
           </div>
 
@@ -171,11 +169,8 @@ export default function Home() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div className="text-center text-gray-600">
               <p>
-                &copy; 2024 Business Improvement Project Management. All rights
+                &copy; 2025 Nicola Muratori. All rights
                 reserved.
-              </p>
-              <p className="text-sm mt-2">
-                Powered by AI agents and modern web technologies.
               </p>
             </div>
           </div>

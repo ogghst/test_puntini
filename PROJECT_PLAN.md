@@ -83,7 +83,7 @@ This document outlines the implementation plan for adding missing features to th
 - **Centralized ORM operations in `db.py`** - ALL database functions must be implemented here
 - **API endpoints MUST use functions from `db.py`** - no direct ORM calls in API layer
 - **Database configuration through `config.json`** - location and settings managed via config
-- **Default database location**: `database/puntini.db`
+- **Default database location**: `database/puntini.db` - relative to project root
 - Database migrations with Alembic
 - Database initialization script with default users
 

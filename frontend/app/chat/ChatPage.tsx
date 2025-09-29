@@ -18,7 +18,7 @@ const ChatPage: React.FC = () => {
     <div className="h-full w-full">
       <Chat
         welcomeMessage="Hello! How can I help you with your project today?"
-        showDebugMessages={true}
+        showDebugMessages={false}
         inputPlaceholder="Type a message..."
       />
     </div>

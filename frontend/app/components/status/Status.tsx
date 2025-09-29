@@ -49,11 +49,13 @@ export const Status: React.FC<StatusProps> = ({ sessionId }) => {
 
   if (!sessionId) {
     return (
-      <Card>
-        <CardContent className="p-6 text-center text-gray-500">
-          <Target className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-          <p>No session selected</p>
-          <p className="text-sm">Select a session to view status</p>
+      <Card className="w-full h-full flex flex-col">
+        <CardContent className="flex-1 flex items-center justify-center p-6 text-center text-gray-500">
+          <div>
+            <Target className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+            <p>No session selected</p>
+            <p className="text-sm">Select a session to view status</p>
+          </div>
         </CardContent>
       </Card>
     );
@@ -61,17 +63,19 @@ export const Status: React.FC<StatusProps> = ({ sessionId }) => {
 
   if (!currentStatus) {
     return (
-      <Card>
-        <CardHeader>
+      <Card className="w-full h-full flex flex-col">
+        <CardHeader className="flex-shrink-0">
           <CardTitle className="flex items-center gap-2">
             <Target className="h-5 w-5" />
             Agent Status
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-6 text-center text-gray-500">
-          <Target className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-          <p>No status updates available</p>
-          <p className="text-sm">Status will appear here when the agent starts working</p>
+        <CardContent className="flex-1 flex items-center justify-center p-6 text-center text-gray-500">
+          <div>
+            <Target className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+            <p>No status updates available</p>
+            <p className="text-sm">Status will appear here when the agent starts working</p>
+          </div>
         </CardContent>
       </Card>
     );
@@ -97,8 +101,8 @@ export const Status: React.FC<StatusProps> = ({ sessionId }) => {
     : 0;
 
   return (
-    <Card className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
-      <CardHeader className="pb-3">
+    <Card className="w-full h-full flex flex-col bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+      <CardHeader className="pb-3 flex-shrink-0">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-semibold text-blue-900 flex items-center gap-2">
             <Target className="h-5 w-5" />
@@ -120,7 +124,7 @@ export const Status: React.FC<StatusProps> = ({ sessionId }) => {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className="flex-1 overflow-y-auto space-y-4">
         {/* Overall Progress */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">

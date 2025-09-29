@@ -1,11 +1,11 @@
 /**
  * Main Dashboard Component
  *
- * Provides the main interface for the business improvement project management system,
+ * Provides the main interface for the puntini system,
  * integrating session management, project context, and task management.
  */
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 // import { Button } from '../ui/button';
 import {
@@ -16,7 +16,6 @@ import {
   Settings,
   Users,
   Network,
-  BarChart3,
 } from "lucide-react";
 import { ChatPage } from "../../chat/ChatPage";
 import { useSession, type SessionInfo } from "@/utils/session";
@@ -31,7 +30,7 @@ import { GraphContainer } from "../graph/GraphContainer";
 import { Status } from "../status/Status";
 
 export const Dashboard: React.FC = () => {
-  const { currentSession, createSession } = useSession();
+  const { currentSession } = useSession();
   
   // Get auth context with defensive check
   const authContext = useContext(AuthContext);
@@ -42,14 +41,6 @@ export const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState("chat");
 
 
-  // Auto-create a session when Dashboard loads
-  useEffect(() => {
-    if (!currentSession && user) {
-      createSession({ user_id: user.username }).catch(() => {
-        // Failed to create session
-      });
-    }
-  }, [currentSession, createSession, user]);
 
   // Handle session selection
   const handleSessionSelect = (session: SessionInfo) => {
@@ -82,7 +73,7 @@ export const Dashboard: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Activity className="h-8 w-8 text-blue-600" />
                 <h1 className="text-xl font-bold text-gray-900">
-                  Business Improvement Project Management
+                  Puntini
                 </h1>
               </div>
               {user && (
@@ -119,7 +110,7 @@ export const Dashboard: React.FC = () => {
         {/* Custom Tab Implementation */}
         <div className="flex-1 flex flex-col space-y-6 min-h-0 w-full">
           {/* Tab Navigation */}
-          <div className="grid w-full grid-cols-6 bg-gray-100 p-1 rounded-lg">
+          <div className="grid w-full grid-cols-5 bg-gray-100 p-1 rounded-lg">
             <button 
               onClick={() => setActiveTab('chat')}
               className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
@@ -157,15 +148,6 @@ export const Dashboard: React.FC = () => {
               Graph
             </button>
             <button 
-              onClick={() => setActiveTab('status')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
-                activeTab === 'status' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'
-              }`}
-            >
-              <BarChart3 className="h-4 w-4" />
-              Status
-            </button>
-            <button 
               className="flex items-center gap-2 px-4 py-2 rounded-md opacity-50 cursor-not-allowed" 
               disabled
             >
@@ -178,14 +160,24 @@ export const Dashboard: React.FC = () => {
           <div className="flex-1 flex flex-col min-h-0 w-full">
             {/* Chat Tab */}
             <div style={{ display: activeTab === 'chat' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
-              <Card className="flex-1 flex flex-col min-h-0 w-full">
-                <CardHeader className="flex-shrink-0">
-                  <CardTitle>AI Agent Chat</CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 p-0 min-h-0">
-                  <ChatPage />
-                </CardContent>
-              </Card>
+              <div className="flex-1 flex gap-6 min-h-0 w-full">
+                {/* Chat Section - Left Side */}
+                <div className="flex-1 flex flex-col min-h-0">
+                  <Card className="flex-1 flex flex-col min-h-0">
+                    <CardHeader className="flex-shrink-0">
+                      <CardTitle>AI Agent Chat</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex-1 p-0 min-h-0">
+                      <ChatPage />
+                    </CardContent>
+                  </Card>
+                </div>
+                
+                {/* Status Section - Right Side */}
+                <div className="flex-1 flex flex-col min-h-0">
+                  <Status sessionId={contextSession?.session_id || null} />
+                </div>
+              </div>
             </div>
 
             {/* Sessions Tab */}
@@ -203,10 +195,6 @@ export const Dashboard: React.FC = () => {
               <GraphContainer />
             </div>
 
-            {/* Status Tab */}
-            <div style={{ display: activeTab === 'status' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">
-              <Status sessionId={contextSession?.session_id || null} />
-            </div>
 
             {/* Context Tab */}
             <div style={{ display: activeTab === 'context' ? 'flex' : 'none' }} className="flex-1 flex flex-col min-h-0 w-full">

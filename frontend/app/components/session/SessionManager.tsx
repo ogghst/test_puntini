@@ -69,14 +69,22 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     }
   }, []);
 
-  // Load data on component mount
+  // Load data on component mount and set up polling
   useEffect(() => {
     // Add a small delay to ensure authentication is ready
-    const timer = setTimeout(() => {
+    const initialTimer = setTimeout(() => {
       loadData();
     }, 100);
     
-    return () => clearTimeout(timer);
+    // Set up polling every 30 seconds
+    const pollingInterval = setInterval(() => {
+      loadData();
+    }, 30000);
+    
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(pollingInterval);
+    };
   }, [loadData]);
 
   // Refresh current session
@@ -91,32 +99,6 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     }
   };
 
-  // Create new session
-  const handleCreateSession = async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const newSession = await SessionAPI.createSession({
-        user_id: user?.username || "testuser", // Use the authenticated user
-        metadata: { source: "session_manager" },
-      });
-
-      await loadData(); // Reload sessions
-
-      if (onSessionSelect) {
-        onSessionSelect(newSession);
-      }
-    } catch (err) {
-      const apiError =
-        err instanceof SessionAPIError
-          ? err
-          : new SessionAPIError("Failed to create session");
-      setError(apiError.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // Destroy session
   const handleDestroySession = async (sessionId: string) => {
@@ -416,16 +398,9 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                 <div className="text-center py-8 text-gray-500">
                   <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                   <p className="text-lg font-medium mb-2">No sessions found</p>
-                  <p className="text-sm mb-4">
-                    Create your first session to start working with the Puntini Agent
+                  <p className="text-sm">
+                    Sessions will appear here when they are created
                   </p>
-                  <Button
-                    onClick={handleCreateSession}
-                    disabled={isLoading}
-                    className="mt-2"
-                  >
-                    Create First Session
-                  </Button>
                 </div>
               )}
             </div>

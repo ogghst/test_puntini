@@ -5,10 +5,10 @@ import type { Route } from "./+types/chat";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Chat - Business Improvement Project Management" },
+    { title: "Chat" },
     {
       name: "description",
-      content: "Chat with AI agents for project management",
+      content: "Chat with AI agents",
     },
   ];
 }
