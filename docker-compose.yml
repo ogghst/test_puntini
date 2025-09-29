@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/config.json.docker:/app/config.json
+    environment:
+      - PYTHONPATH=/app
+    networks:
+      - puntini-network
+    depends_on:
+      - neo4j
+      - ollama
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    networks:
+      - puntini-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Database service
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/password
+    volumes:
+      - neo4j-data:/data
+    networks:
+      - puntini-network
+    restart: unless-stopped
+
+  # LLM service
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - puntini-network
+    restart: unless-stopped
+
+  # Optional: Langfuse for observability
+  langfuse:
+    image: langfuse/langfuse:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-postgres:5432/langfuse
+      - NEXTAUTH_SECRET=secret
+      - SALT=langfuse
+    networks:
+      - puntini-network
+    depends_on:
+      - langfuse-postgres
+    restart: unless-stopped
+
+  langfuse-postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=langfuse
+      - POSTGRES_USER=langfuse
+      - POSTGRES_PASSWORD=langfuse
+    volumes:
+      - langfuse-postgres-data:/var/lib/postgresql/data
+    networks:
+      - puntini-network
+    restart: unless-stopped
+
+networks:
+  puntini-network:
+    driver: bridge
+
+volumes:
+  neo4j-data:
+  ollama-data:
+  langfuse-postgres-data:

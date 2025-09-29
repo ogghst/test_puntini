@@ -1,0 +1,75 @@
+# Multi-stage Dockerfile to build a combined frontend and backend image
+# This version properly separates concerns while keeping them in one image
+
+# Stage 1: Build the frontend
+FROM node:20-alpine AS frontend-build
+WORKDIR /app/frontend
+COPY ./frontend/package*.json ./
+RUN npm ci
+
+COPY ./frontend ./
+RUN npm run build
+
+# Stage 2: Install backend dependencies
+FROM python:3.11-slim AS backend-deps
+WORKDIR /app/backend
+COPY ./backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Stage 3: Final image with both frontend and backend
+FROM python:3.11-slim
+
+# Install Node.js for serving the frontend
+RUN apt-get update && \
+    apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy backend code and dependencies
+COPY --from=backend-deps /app/backend /app/backend
+COPY ./backend /app/backend
+
+# Copy built frontend assets
+COPY --from=frontend-build /app/frontend/build /app/frontend/build
+
+# Install frontend dependencies for serving
+WORKDIR /app/frontend
+COPY ./frontend/package*.json ./
+RUN npm ci --omit=dev
+
+# Copy frontend files
+COPY ./frontend ./
+
+# Install a simple web server to serve the frontend
+RUN npm install -g serve
+
+# Set working directory back to backend
+WORKDIR /app/backend
+
+# Expose the main port
+EXPOSE 8000
+
+# Copy the docker-specific configuration file to the default config.json
+COPY ./backend/config.json.docker /app/backend/config.json
+
+# Create a startup script that can handle both services
+RUN echo '#!/bin/bash\n\
+echo "Starting backend server..."\n\
+cd /app/backend\n\
+python run_server.py &\n\
+BACKEND_PID=$!\n\
+echo "Starting frontend server..."\n\
+cd /app/frontend\n\
+serve -s build -l 3000 &\n\
+FRONTEND_PID=$!\n\
+echo "Services started. Backend PID: $BACKEND_PID, Frontend PID: $FRONTEND_PID"\n\
+trap "kill $BACKEND_PID $FRONTEND_PID" EXIT\n\
+wait $BACKEND_PID $FRONTEND_PID\n\
+' > /start.sh && chmod +x /start.sh
+
+# Define the command to run the application
+CMD ["/start.sh"]
