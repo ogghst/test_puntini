@@ -2,10 +2,8 @@
  * Configuration management utility for the frontend application.
  * 
  * This module provides a centralized configuration system that loads settings
- * from a JSON configuration file and supports environment variable overrides.
+ * exclusively from environment variables.
  */
-
-import configData from '../../config.json';
 
 // Configuration interfaces
 export interface ApiConfig {
@@ -57,70 +55,87 @@ export interface AppConfig {
   development: DevelopmentConfig;
 }
 
-// Environment variable overrides
-interface EnvironmentOverrides {
-  VITE_API_BASE_URL?: string;
-  VITE_WS_BASE_URL?: string;
-  VITE_DEBUG_MODE?: string;
-  VITE_ANALYTICS_ENABLED?: string;
-  NODE_ENV?: string;
-}
-
 /**
  * Configuration manager class
  */
 class ConfigManager {
   private config: AppConfig;
-  private environment: EnvironmentOverrides;
 
   constructor() {
-    this.environment = {
-      VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
-      VITE_WS_BASE_URL: import.meta.env.VITE_WS_BASE_URL,
-      VITE_DEBUG_MODE: import.meta.env.VITE_DEBUG_MODE,
-      VITE_ANALYTICS_ENABLED: import.meta.env.VITE_ANALYTICS_ENABLED,
-      NODE_ENV: import.meta.env.NODE_ENV,
-    };
-
-    // Load and merge configuration
+    // Load configuration from environment variables
     this.config = this.loadConfiguration();
   }
 
   /**
-   * Load configuration with environment variable overrides
+   * Load configuration from environment variables
    */
   private loadConfiguration(): AppConfig {
-    const baseConfig = configData as AppConfig;
-
-    // Apply environment variable overrides
-    const mergedConfig: AppConfig = {
-      ...baseConfig,
+    const config: AppConfig = {
       api: {
-        ...baseConfig.api,
-        baseUrl: this.environment.VITE_API_BASE_URL || baseConfig.api.baseUrl,
+        baseUrl: this.getEnv('VITE_API_BASE_URL', 'http://localhost:8000'),
+        timeout: this.getEnvNumber('VITE_API_TIMEOUT', 30000),
+        retryAttempts: this.getEnvNumber('VITE_API_RETRY_ATTEMPTS', 3),
+        retryDelay: this.getEnvNumber('VITE_API_RETRY_DELAY', 1000),
+      },
+      websocket: {
+        reconnectAttempts: this.getEnvNumber('VITE_WS_RECONNECT_ATTEMPTS', 5),
+        reconnectDelay: this.getEnvNumber('VITE_WS_RECONNECT_DELAY', 2000),
+        heartbeatInterval: this.getEnvNumber('VITE_WS_HEARTBEAT_INTERVAL', 30000),
+        connectionTimeout: this.getEnvNumber('VITE_WS_CONNECTION_TIMEOUT', 10000),
+      },
+      auth: {
+        tokenStorageKey: this.getEnv('VITE_AUTH_TOKEN_KEY', 'puntini_access_token'),
+        userStorageKey: this.getEnv('VITE_AUTH_USER_KEY', 'puntini_user_data'),
+        tokenExpiryBuffer: this.getEnvNumber('VITE_AUTH_TOKEN_EXPIRY_BUFFER', 300000),
+      },
+      ui: {
+        theme: this.getEnv('VITE_UI_THEME', 'auto') as 'light' | 'dark' | 'auto',
+        language: this.getEnv('VITE_UI_LANGUAGE', 'en'),
+        autoSave: this.getEnvBoolean('VITE_UI_AUTO_SAVE', true),
+        autoSaveInterval: this.getEnvNumber('VITE_UI_AUTO_SAVE_INTERVAL', 30000),
       },
       features: {
-        ...baseConfig.features,
-        enableDebugMode: this.parseBoolean(this.environment.VITE_DEBUG_MODE, baseConfig.features.enableDebugMode),
-        enableAnalytics: this.parseBoolean(this.environment.VITE_ANALYTICS_ENABLED, baseConfig.features.enableAnalytics),
+        enableDebugMode: this.getEnvBoolean('VITE_DEBUG_MODE', this.isDevelopmentMode()),
+        enableAnalytics: this.getEnvBoolean('VITE_ANALYTICS_ENABLED', false),
+        enableOfflineMode: this.getEnvBoolean('VITE_OFFLINE_MODE', false),
+        enablePushNotifications: this.getEnvBoolean('VITE_PUSH_NOTIFICATIONS', false),
       },
       development: {
-        ...baseConfig.development,
-        enableConsoleLogging: this.isDevelopmentMode() ? true : baseConfig.development.enableConsoleLogging,
+        enableHotReload: this.getEnvBoolean('VITE_DEV_HOT_RELOAD', true),
+        enableSourceMaps: this.getEnvBoolean('VITE_DEV_SOURCE_MAPS', true),
+        enableConsoleLogging: this.getEnvBoolean('VITE_DEV_CONSOLE_LOGGING', this.isDevelopmentMode()),
       },
     };
 
     // Validate configuration
-    this.validateConfiguration(mergedConfig);
+    this.validateConfiguration(config);
 
-    return mergedConfig;
+    return config;
   }
 
   /**
-   * Parse boolean environment variable
+   * Get environment variable with fallback
    */
-  private parseBoolean(value: string | undefined, defaultValue: boolean): boolean {
-    if (value === undefined) return defaultValue;
+  private getEnv(key: string, defaultValue: string): string {
+    return import.meta.env[key] || defaultValue;
+  }
+
+  /**
+   * Get environment variable as number with fallback
+   */
+  private getEnvNumber(key: string, defaultValue: number): number {
+    const value = import.meta.env[key];
+    if (value === undefined || value === '') return defaultValue;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? defaultValue : parsed;
+  }
+
+  /**
+   * Get environment variable as boolean with fallback
+   */
+  private getEnvBoolean(key: string, defaultValue: boolean): boolean {
+    const value = import.meta.env[key];
+    if (value === undefined || value === '') return defaultValue;
     return value.toLowerCase() === 'true' || value === '1';
   }
 
@@ -128,8 +143,8 @@ class ConfigManager {
    * Check if running in development mode
    */
   private isDevelopmentMode(): boolean {
-    return this.environment.NODE_ENV === 'development' || 
-           this.environment.NODE_ENV === 'dev' ||
+    return import.meta.env.NODE_ENV === 'development' || 
+           import.meta.env.NODE_ENV === 'dev' ||
            import.meta.env.DEV;
   }
 

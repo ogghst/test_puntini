@@ -1,75 +1,79 @@
 # Frontend Configuration System
 
-This document describes the robust configuration system implemented for the frontend application.
+This document describes the environment-based configuration system for the frontend application.
 
 ## Overview
 
-The frontend uses a centralized configuration system that combines:
-- JSON configuration file (`config.json`) as the base configuration
-- Environment variables for environment-specific overrides
+The frontend uses a centralized configuration system that loads all settings exclusively from environment variables. This provides:
+- Single source of truth for configuration
+- Environment-specific settings without code changes
 - Type-safe configuration management with validation
+- Docker-friendly deployment
 
 ## Configuration Files
 
-### 1. Base Configuration (`config.json`)
+### 1. `.env` - Development Configuration
 
-The main configuration file containing default settings:
+Used for local development. This file is gitignored and should be created from `.env.example`.
 
-```json
-{
-  "api": {
-    "baseUrl": "http://localhost:8000",
-    "timeout": 30000,
-    "retryAttempts": 3,
-    "retryDelay": 1000
-  },
-  "websocket": {
-    "reconnectAttempts": 5,
-    "reconnectDelay": 2000,
-    "heartbeatInterval": 30000,
-    "connectionTimeout": 10000
-  },
-  "auth": {
-    "tokenStorageKey": "authToken",
-    "userStorageKey": "authUser",
-    "tokenExpiryBuffer": 300000
-  },
-  "ui": {
-    "theme": "light",
-    "language": "en",
-    "autoSave": true,
-    "autoSaveInterval": 30000
-  },
-  "features": {
-    "enableDebugMode": false,
-    "enableAnalytics": false,
-    "enableOfflineMode": false,
-    "enablePushNotifications": false
-  },
-  "development": {
-    "enableHotReload": true,
-    "enableSourceMaps": true,
-    "enableConsoleLogging": true
-  }
-}
-```
+### 2. `.env.example` - Configuration Template
 
-### 2. Environment Files
+Template file stored in version control that documents all available configuration options with sensible defaults.
 
-- `env.example` - Template for environment variables
-- `env.development` - Development environment settings
-- `env.production` - Production environment settings
+### 3. `.env.docker` - Docker Configuration
+
+Used when building and running the frontend in Docker containers. This file is gitignored and should be customized for your Docker environment.
 
 ## Environment Variables
 
-The following environment variables can override configuration settings:
+All configuration is managed through environment variables with the `VITE_` prefix (required by Vite for client-side access):
 
+### API Configuration
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `VITE_API_BASE_URL` | API base URL | `http://localhost:8000` |
+| `VITE_API_TIMEOUT` | Request timeout in ms | `30000` |
+| `VITE_API_RETRY_ATTEMPTS` | Number of retry attempts | `3` |
+| `VITE_API_RETRY_DELAY` | Delay between retries in ms | `1000` |
+
+### WebSocket Configuration
+| Variable | Description | Default |
+|----------|-------------|---------|
 | `VITE_WS_BASE_URL` | WebSocket base URL | `ws://localhost:8000` |
+| `VITE_WS_RECONNECT_ATTEMPTS` | Max reconnection attempts | `5` |
+| `VITE_WS_RECONNECT_DELAY` | Delay between reconnections in ms | `2000` |
+| `VITE_WS_HEARTBEAT_INTERVAL` | Heartbeat interval in ms | `30000` |
+| `VITE_WS_CONNECTION_TIMEOUT` | Connection timeout in ms | `10000` |
+
+### Authentication Configuration
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_AUTH_TOKEN_KEY` | LocalStorage key for token | `puntini_access_token` |
+| `VITE_AUTH_USER_KEY` | LocalStorage key for user data | `puntini_user_data` |
+| `VITE_AUTH_TOKEN_EXPIRY_BUFFER` | Token expiry buffer in ms | `300000` |
+
+### UI Configuration
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_UI_THEME` | UI theme (light/dark/auto) | `auto` |
+| `VITE_UI_LANGUAGE` | UI language | `en` |
+| `VITE_UI_AUTO_SAVE` | Enable auto-save | `true` |
+| `VITE_UI_AUTO_SAVE_INTERVAL` | Auto-save interval in ms | `30000` |
+
+### Feature Flags
+| Variable | Description | Default |
+|----------|-------------|---------|
 | `VITE_DEBUG_MODE` | Enable debug mode | `false` |
 | `VITE_ANALYTICS_ENABLED` | Enable analytics | `false` |
+| `VITE_OFFLINE_MODE` | Enable offline mode | `false` |
+| `VITE_PUSH_NOTIFICATIONS` | Enable push notifications | `false` |
+
+### Development Settings
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_DEV_HOT_RELOAD` | Enable hot reload | `true` |
+| `VITE_DEV_SOURCE_MAPS` | Enable source maps | `true` |
+| `VITE_DEV_CONSOLE_LOGGING` | Enable console logging | Matches NODE_ENV |
 | `NODE_ENV` | Environment mode | `development` |
 
 ## Usage
@@ -112,20 +116,37 @@ if (config.isAnalyticsEnabled()) {
 }
 ```
 
-### Environment-Specific Configuration
+### Setting Up Configuration
 
-#### Development
+#### Local Development
 
 ```bash
-# Copy the example file
-cp env.example .env.local
+# 1. Copy the example file
+cd frontend
+cp .env.example .env
 
-# Edit .env.local
-VITE_API_BASE_URL=http://localhost:8000
-VITE_DEBUG_MODE=true
+# 2. Edit .env with your local settings
+# The defaults are already configured for local development
+# Only change what you need
 ```
 
-#### Production
+#### Docker Deployment
+
+```bash
+# 1. Copy the example file
+cd frontend
+cp .env.example .env.docker
+
+# 2. Edit .env.docker for your Docker environment
+# Update URLs to match your Docker network configuration
+VITE_API_BASE_URL=http://backend:8000
+VITE_WS_BASE_URL=ws://backend:8000
+NODE_ENV=production
+```
+
+#### Production Deployment
+
+For production deployments without Docker, set environment variables directly:
 
 ```bash
 # Set environment variables
@@ -133,6 +154,10 @@ export VITE_API_BASE_URL=https://api.yourdomain.com
 export VITE_WS_BASE_URL=wss://api.yourdomain.com
 export VITE_DEBUG_MODE=false
 export VITE_ANALYTICS_ENABLED=true
+export NODE_ENV=production
+
+# Then build
+npm run build
 ```
 
 ## Configuration Features
@@ -158,14 +183,13 @@ Configuration is validated on load:
 - Timeout values must be positive
 - Reconnect attempts must be non-negative
 
-### 3. Environment Variable Overrides
+### 3. Default Values
 
-Environment variables automatically override JSON configuration:
+All configuration options have sensible defaults defined in code. If an environment variable is not set, the application uses these defaults:
 
 ```typescript
-// JSON config: "baseUrl": "http://localhost:8000"
-// Environment: VITE_API_BASE_URL=https://api.production.com
-// Result: baseUrl = "https://api.production.com"
+// Example: If VITE_API_BASE_URL is not set
+// Result: baseUrl = "http://localhost:8000"
 ```
 
 ### 4. Debug Logging
@@ -232,56 +256,96 @@ export default defineConfig(({ mode }) => {
 
 ## Best Practices
 
-### 1. Configuration Updates
+### 1. Configuration Management
 
-- Always update the JSON configuration file for new settings
-- Add corresponding environment variables for overrides
-- Update TypeScript interfaces when adding new configuration options
+- **Never commit** `.env` or `.env.docker` files to version control
+- Always update `.env.example` when adding new configuration options
+- Document all environment variables in this README
+- Update TypeScript interfaces in `app/utils/config.ts` when adding new options
 
-### 2. Environment Management
+### 2. Environment Files
 
-- Use environment files for different deployment environments
-- Never commit sensitive configuration to version control
-- Use environment variables for production secrets
+- Use `.env` for local development
+- Use `.env.docker` for Docker builds
+- Keep `.env.example` up-to-date as the source of truth for available options
+- Use explicit values in production rather than `.env` files
 
-### 3. Debug Mode
+### 3. Security
 
-- Enable debug mode only in development
+- Never commit sensitive values (API keys, secrets) to version control
+- Use environment variables for sensitive production configuration
+- Validate all configuration values at startup
+
+### 4. Debug Mode
+
+- Enable debug mode only in development (`VITE_DEBUG_MODE=true`)
 - Use debug mode for additional logging and diagnostics
-- Disable debug mode in production builds
+- Always disable debug mode in production builds
 
-### 4. URL Configuration
+### 5. URL Configuration
 
-- Use HTTPS/WSS in production
-- Configure proper CORS settings for API endpoints
-- Use proxy configuration in development for seamless local development
+- Use HTTPS/WSS in production environments
+- Configure proper CORS settings on the backend
+- Use Docker service names (e.g., `http://backend:8000`) in `.env.docker`
+- Use localhost URLs in `.env` for local development
 
 ## Troubleshooting
 
 ### Configuration Not Loading
 
-1. Check that `config.json` exists and is valid JSON
-2. Verify environment variables are prefixed with `VITE_`
-3. Check browser console for configuration errors
+1. Verify environment variables are prefixed with `VITE_`
+2. Check browser console for configuration validation errors
+3. Ensure `.env` file exists in the frontend directory
+4. Restart the development server after changing `.env` files
 
 ### Environment Variables Not Working
 
-1. Ensure variables start with `VITE_` prefix
-2. Restart the development server after adding new variables
-3. Check that `.env` files are in the project root
+1. Ensure all variables start with `VITE_` prefix (Vite requirement)
+2. **Restart the development server** after adding/changing variables
+3. Check that `.env` file is in the `frontend/` directory
+4. Verify the variable name matches exactly (case-sensitive)
+5. Check for syntax errors in `.env` file (no spaces around `=`)
+
+### Docker Build Issues
+
+1. Ensure `.env.docker` exists in the frontend directory
+2. Verify Docker network service names are correct
+3. Check Dockerfile copies `.env.docker` correctly
+4. Rebuild the Docker image after changing `.env.docker`
 
 ### WebSocket Connection Issues
 
-1. Verify WebSocket URL configuration
-2. Check that the backend supports WebSocket connections
-3. Ensure proper CORS configuration on the backend
+1. Verify `VITE_WS_BASE_URL` is set correctly
+2. Use `ws://` for HTTP backends, `wss://` for HTTPS
+3. Check that the backend supports WebSocket connections
+4. Ensure proper CORS configuration on the backend
 
-## Migration from Hardcoded Values
+## Adding New Configuration Options
 
-If migrating from hardcoded configuration:
+To add a new configuration option:
 
-1. Identify all hardcoded URLs and settings
-2. Add them to `config.json`
-3. Update components to use `config.getApiUrl()` instead of hardcoded strings
-4. Add environment variable support for deployment flexibility
-5. Test configuration in different environments
+1. **Update TypeScript interfaces** in `app/utils/config.ts`:
+   ```typescript
+   export interface ApiConfig {
+     baseUrl: string;
+     newOption: string; // Add your new option
+   }
+   ```
+
+2. **Add to ConfigManager.loadConfiguration()**:
+   ```typescript
+   api: {
+     baseUrl: this.getEnv('VITE_API_BASE_URL', 'http://localhost:8000'),
+     newOption: this.getEnv('VITE_API_NEW_OPTION', 'default-value'),
+   }
+   ```
+
+3. **Update `.env.example`**:
+   ```bash
+   # New Option Description
+   VITE_API_NEW_OPTION=default-value
+   ```
+
+4. **Update this documentation** with the new variable in the tables above
+
+5. **Update `.env` and `.env.docker`** with appropriate values

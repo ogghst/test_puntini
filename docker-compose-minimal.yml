@@ -1,32 +1,15 @@
-version: '3.8'
-
 services:
-  backend:
+  combined:
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: Dockerfile.combined
     ports:
-      - "8000:8000"
-    volumes:
-      - ./backend/config.json.docker:/app/config.json
+      - "8025:8025"  # Frontend port
+      - "8026:8026"  # Backend port
     environment:
       - PYTHONPATH=/app
     networks:
       - puntini-network
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - VITE_API_URL=http://backend:8000  # Use service name for internal communication
-    networks:
-      - puntini-network
-    depends_on:
-      - backend
     restart: unless-stopped
 
 networks:

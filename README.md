@@ -18,7 +18,26 @@ For detailed architectural information, see [AGENTS.md](AGENTS.md).
 
 ## Quick Start
 
-### Installation
+### Option 1: Docker (Recommended)
+
+The easiest way to run the application is with Docker:
+
+```bash
+# Full stack with all services (Neo4j, Ollama, Langfuse)
+docker-compose up -d
+
+# Minimal setup (just frontend and backend in one container)
+docker-compose -f docker-compose-minimal.yml up -d
+```
+
+**Access the application:**
+- Frontend: http://localhost:8025
+- Backend API: http://localhost:8026
+- API Docs: http://localhost:8026/docs
+
+For detailed Docker setup instructions, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
+
+### Option 2: Local Installation
 
 ```bash
 cd backend
@@ -203,11 +222,44 @@ isort puntini/
 mypy puntini/
 ```
 
+## Docker Deployment
+
+The application provides three Docker images for flexible deployment:
+
+### 1. Backend Image (`backend/Dockerfile`)
+- Standalone Python backend service
+- Port: 8026
+- Config: `backend/config.docker.json`
+
+### 2. Frontend Image (`frontend/Dockerfile`)
+- Standalone React frontend service
+- Port: 8025
+- Config: `frontend/.env.docker`
+
+### 3. Combined Image (`Dockerfile.combined`)
+- Single container with both services
+- Ports: 8025 (frontend), 8026 (backend)
+- Uses same config files as standalone images
+
+**Build individual images:**
+```bash
+# Backend
+docker build -t puntini-backend -f backend/Dockerfile backend/
+
+# Frontend
+docker build -t puntini-frontend -f frontend/Dockerfile .
+
+# Combined
+docker build -t puntini-combined -f Dockerfile.combined .
+```
+
+For more details, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
+
 ## API Documentation
 
 When running the server, API documentation is available at:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+- Docker: http://localhost:8026/docs (Swagger UI) and http://localhost:8026/redoc (ReDoc)
+- Local: http://localhost:8000/docs (Swagger UI) and http://localhost:8000/redoc (ReDoc)
 
 ## License
 
