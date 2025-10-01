@@ -215,3 +215,5 @@ __marimo__/
 
 config.json
 config.docker.json
+.react-router/
+node_modules/
