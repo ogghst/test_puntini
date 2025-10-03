@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 
 from ..utils.settings import Settings
 from ..logging import get_logger
+from ..graph.graph_store_factory import make_graph_store, GraphStoreConfig
 
 
 class SessionData:
@@ -23,7 +24,8 @@ class SessionData:
         user_id: str,
         graph_data: Optional[Dict[str, Any]] = None,
         chat_history: Optional[List[Dict[str, Any]]] = None,
-        created_at: Optional[datetime] = None
+        created_at: Optional[datetime] = None,
+        graph_store: Optional[Any] = None
     ):
         """Initialize session data.
         
@@ -33,6 +35,7 @@ class SessionData:
             graph_data: Current graph state.
             chat_history: Chat message history.
             created_at: Session creation timestamp.
+            graph_store: Graph store instance for this session.
         """
         self.session_id = session_id
         self.user_id = user_id
@@ -41,6 +44,7 @@ class SessionData:
         self.created_at = created_at or datetime.utcnow()
         self.last_activity = datetime.utcnow()
         self.is_active = True
+        self.graph_store = graph_store
     
     def update_activity(self) -> None:
         """Update the last activity timestamp."""
@@ -196,9 +200,24 @@ class SessionManager:
             Created session data.
         """
         session_id = str(uuid4())
+        
+        # Create graph store for this session
+        try:
+            graph_config_dict = self.settings.get_graph_store_config()
+            graph_config = GraphStoreConfig(**graph_config_dict)
+            graph_store = make_graph_store(graph_config)
+            self.logger.info(f"Created graph store for session {session_id}: {graph_config.kind}")
+        except Exception as e:
+            self.logger.error(f"Failed to create graph store for session {session_id}: {e}")
+            # Fallback to memory graph store
+            from ..graph.graph_store_factory import create_memory_graph_store
+            graph_store = create_memory_graph_store()
+            self.logger.warning(f"Using memory graph store as fallback for session {session_id}")
+        
         session_data = SessionData(
             session_id=session_id,
-            user_id=user_id
+            user_id=user_id,
+            graph_store=graph_store
         )
         
         self.sessions[session_id] = session_data
@@ -312,6 +331,14 @@ class SessionManager:
             return False
         
         session.is_active = False
+        
+        # Clean up graph store if it exists
+        if session.graph_store and hasattr(session.graph_store, 'close'):
+            try:
+                session.graph_store.close()
+                self.logger.debug(f"Closed graph store for session {session_id}")
+            except Exception as e:
+                self.logger.warning(f"Error closing graph store for session {session_id}: {e}")
         
         # Remove from user sessions
         user_id = session.user_id

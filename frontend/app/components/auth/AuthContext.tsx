@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { SessionAPI } from "@/utils/session";
 import { config, getApiUrl } from "@/utils/config";
+import { performStorageCleanup, hasInconsistentAuthData } from "@/utils/storage-cleanup";
 
 interface AuthContextType {
   user: { username: string; email: string; full_name: string } | null;
@@ -13,7 +14,7 @@ interface AuthContextType {
   error: string | null;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<{ username: string; email: string; full_name: string } | null>(null);
@@ -23,14 +24,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Check if user is already logged in on initial load
   useEffect(() => {
+    setLoading(true);
+    
+    // Perform storage cleanup to fix any inconsistencies
+    if (hasInconsistentAuthData()) {
+      performStorageCleanup();
+    }
+    
     const authConfig = config.getAuthConfig();
     const storedToken = localStorage.getItem(authConfig.tokenStorageKey);
     const storedUser = localStorage.getItem(authConfig.userStorageKey);
     
     if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+      try {
+        const userObj = JSON.parse(storedUser);
+        setToken(storedToken);
+        setUser(userObj);
+      } catch {
+        // Clear invalid data
+        localStorage.removeItem(authConfig.tokenStorageKey);
+        localStorage.removeItem(authConfig.userStorageKey);
+      }
     }
+    
+    setLoading(false);
   }, []);
 
   const login = async (username: string, password: string) => {
@@ -106,10 +123,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     SessionAPI.disconnectWebSocket();
   };
 
+  const isAuthenticated = !!user && !!token;
+  
   const value = {
     user,
     token,
-    isAuthenticated: !!user,
+    isAuthenticated,
     login,
     register,
     logout,

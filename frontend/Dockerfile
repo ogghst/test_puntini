@@ -13,9 +13,6 @@ FROM node:20-alpine AS build-env
 COPY frontend/ /app/
 COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 WORKDIR /app
-# Copy Docker environment configuration for build
-# Build context is project root, so we copy from frontend/.env.docker
-COPY frontend/.env.docker /app/.env
 RUN npm run build
 
 FROM node:20-alpine
@@ -23,5 +20,4 @@ COPY frontend/package.json frontend/package-lock.json /app/
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
 COPY --from=build-env /app/build /app/build
 WORKDIR /app
-EXPOSE 8025
 CMD ["npm", "run", "start"]

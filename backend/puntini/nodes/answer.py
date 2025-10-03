@@ -41,11 +41,6 @@ def answer(
         progress = state.get("progress", [])
         artifacts = state.get("artifacts", [])
         failures = state.get("failures", [])
-    else:
-        result = getattr(state, "result", {})
-        progress = getattr(state, "progress", [])
-        artifacts = getattr(state, "artifacts", [])
-        failures = getattr(state, "failures", [])
     
     # Determine completion status
     if failures:

@@ -1,5 +1,5 @@
-import { type ReactNode } from "react";
-import { useAuth } from "./AuthContext";
+import { type ReactNode, useContext } from "react";
+import { AuthContext } from "./AuthContext";
 import { LoginPage } from "./LoginPage";
 
 interface ProtectedRouteProps {
@@ -7,7 +7,21 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated, loading } = useAuth();
+  const authContext = useContext(AuthContext);
+  
+  // Handle case where AuthProvider is not available
+  if (!authContext) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Loading...</h1>
+          <p className="text-gray-600">Initializing authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { isAuthenticated, loading } = authContext;
 
   if (loading) {
     return (

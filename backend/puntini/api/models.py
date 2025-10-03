@@ -28,6 +28,7 @@ class MessageType(str, Enum):
     REASONING = "reasoning"
     DEBUG = "debug"
     GRAPH_UPDATE = "graph_update"
+    STATE_UPDATE = "state_update"
     ERROR = "error"
     CHAT_HISTORY = "chat_history"
     
@@ -242,6 +243,50 @@ class GraphUpdate(BaseMessage):
         )
 
 
+class StateUpdate(BaseMessage):
+    """Structured state update message for agent progress."""
+    
+    type: MessageType = Field(default=MessageType.STATE_UPDATE, description="Message type")
+    data: Dict[str, Any] = Field(
+        ...,
+        description="State update data containing structured information about agent progress"
+    )
+    
+    @classmethod
+    def create(
+        cls,
+        update_type: str,
+        current_step: str,
+        todo_list: List[Dict[str, Any]],
+        entities_created: List[Dict[str, Any]],
+        session_id: Optional[str] = None,
+        **kwargs
+    ) -> "StateUpdate":
+        """Create a structured state update message.
+        
+        Args:
+            update_type: Type of state update (e.g., 'parse_goal').
+            current_step: Current step in the agent workflow.
+            todo_list: List of todo items with their status.
+            entities_created: List of entities that have been created.
+            session_id: Optional session identifier.
+            **kwargs: Additional data to include in the update.
+            
+        Returns:
+            StateUpdate message instance.
+        """
+        return cls(
+            data={
+                "update_type": update_type,
+                "current_step": current_step,
+                "todo_list": todo_list,
+                "entities_created": entities_created,
+                **kwargs
+            },
+            session_id=session_id
+        )
+
+
 class Error(BaseMessage):
     """Error message."""
     
@@ -332,6 +377,7 @@ MessageUnion = Union[
     Reasoning,
     Debug,
     GraphUpdate,
+    StateUpdate,
     Error,
     ChatHistory,
     Ping,
@@ -369,6 +415,8 @@ def parse_message(data: Dict[str, Any]) -> MessageUnion:
         return Debug(**data)
     elif message_type == MessageType.GRAPH_UPDATE:
         return GraphUpdate(**data)
+    elif message_type == MessageType.STATE_UPDATE:
+        return StateUpdate(**data)
     elif message_type == MessageType.ERROR:
         return Error(**data)
     elif message_type == MessageType.CHAT_HISTORY:
@@ -379,3 +427,57 @@ def parse_message(data: Dict[str, Any]) -> MessageUnion:
         return Pong(**data)
     else:
         raise ValueError(f"Unsupported message type: {message_type}")
+
+
+# Graph API Models
+
+class GraphNodeResponse(BaseModel):
+    """Graph node response model."""
+    
+    id: str = Field(..., description="Node ID")
+    label: str = Field(..., description="Node label")
+    key: str = Field(..., description="Node key")
+    properties: Dict[str, Any] = Field(default_factory=dict, description="Node properties")
+    created_at: Optional[str] = Field(None, description="Creation timestamp")
+    updated_at: Optional[str] = Field(None, description="Last update timestamp")
+
+
+class GraphEdgeResponse(BaseModel):
+    """Graph edge response model."""
+    
+    id: str = Field(..., description="Edge ID")
+    relationship_type: str = Field(..., description="Relationship type")
+    source_id: str = Field(..., description="Source node ID")
+    target_id: str = Field(..., description="Target node ID")
+    source_key: str = Field(..., description="Source node key")
+    target_key: str = Field(..., description="Target node key")
+    source_label: str = Field(..., description="Source node label")
+    target_label: str = Field(..., description="Target node label")
+    properties: Dict[str, Any] = Field(default_factory=dict, description="Edge properties")
+    created_at: Optional[str] = Field(None, description="Creation timestamp")
+    updated_at: Optional[str] = Field(None, description="Last update timestamp")
+
+
+class GraphDataResponse(BaseModel):
+    """Complete graph data response model."""
+    
+    nodes: List[GraphNodeResponse] = Field(..., description="List of nodes")
+    edges: List[GraphEdgeResponse] = Field(..., description="List of edges")
+    total_nodes: int = Field(..., description="Total number of nodes")
+    total_edges: int = Field(..., description="Total number of edges")
+
+
+class SubgraphRequest(BaseModel):
+    """Request model for subgraph queries."""
+    
+    match_spec: Dict[str, Any] = Field(..., description="Match specification")
+    depth: int = Field(default=1, ge=0, le=5, description="Maximum depth for subgraph")
+
+
+class SubgraphResponse(BaseModel):
+    """Subgraph response model."""
+    
+    nodes: List[GraphNodeResponse] = Field(..., description="Subgraph nodes")
+    edges: List[GraphEdgeResponse] = Field(..., description="Subgraph edges")
+    depth: int = Field(..., description="Actual depth used")
+    central_nodes: List[str] = Field(..., description="Central node IDs")

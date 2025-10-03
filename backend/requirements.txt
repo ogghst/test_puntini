@@ -8,6 +8,7 @@ langchain-ollama>=0.2.0
 langchain-deepseek
 # Graph database
 neo4j>=5.0.0
+gqlalchemy>=1.4.0
 
 # Observability
 langfuse>=3.0.0
@@ -32,6 +33,11 @@ mypy>=1.0.0
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 websockets>=12.0
+
+# Database dependencies
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+aiosqlite>=0.20.0
 
 # Authentication and security
 python-jose[cryptography]>=3.3.0

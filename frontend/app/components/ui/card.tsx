@@ -1,5 +1,5 @@
-import { forwardRef, cloneElement } from "react";
-import { cn } from "../../utils/utils";
+import { forwardRef } from "react";
+import { cn } from "../../lib/utils";
 
 const Card = forwardRef<
   HTMLDivElement,

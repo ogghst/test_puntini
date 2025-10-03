@@ -5,10 +5,10 @@ import type { Route } from "./+types/dashboard";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Dashboard - Business Improvement Project Management" },
+    { title: "Dashboard - Puntini" },
     {
       name: "description",
-      content: "Manage your business improvement projects with AI agents",
+      content: "Manage your requests with AI agents",
     },
   ];
 }

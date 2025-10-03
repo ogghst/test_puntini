@@ -1,4 +1,6 @@
-# Puntini Agent
+# Puntini
+
+![puntini](docs/puntini.png)
 
 A controllable, observable multi-tool agent for graph manipulation using LangGraph + LangChain, with progressive context disclosure, intelligent escalation, strict contracts, and production-grade instrumentation via Langfuse.
 

@@ -1,0 +1,36 @@
+name: Frontend Docker Build and Test
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Build frontend Docker image
+      run: |
+        cd frontend
+        docker build -t puntini-frontend-test .
+    
+    - name: Test frontend Docker image
+      run: |
+        cd frontend
+        docker run -d --name puntini-frontend-test -p 8026:8026 puntini-frontend-test
+        sleep 10
+        docker ps | grep puntini-frontend-test
+        docker logs puntini-frontend-test
+        docker stop puntini-frontend-test
