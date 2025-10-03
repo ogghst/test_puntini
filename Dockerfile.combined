@@ -1,0 +1,48 @@
+# Combined Dockerfile for frontend and backend
+FROM node:20-alpine AS frontend-builder
+
+# Build frontend
+COPY frontend/ /app/frontend/
+WORKDIR /app/frontend
+# Copy environment file for Docker build
+COPY frontend/.env.docker /app/frontend/.env
+RUN npm ci
+RUN npm run build
+
+# Python backend stage
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install Python dependencies
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend application
+COPY backend/ .
+
+# Copy frontend application and dependencies
+COPY --from=frontend-builder /app/frontend /app/frontend
+
+# Copy backend configuration for docker setup
+COPY backend/config.docker.json /app/config.json
+
+# Install Node.js for serving frontend
+RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
+# Install React Router serve package for production
+RUN npm install -g @react-router/serve
+
+# Copy startup script
+COPY start_combined.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+# Expose ports
+EXPOSE 8025 8026
+
+# Use the startup script
+CMD ["/app/start.sh"]

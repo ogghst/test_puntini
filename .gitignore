@@ -144,6 +144,12 @@ ENV/
 env.bak/
 venv.bak/
 
+# Frontend environment files
+frontend/.env
+frontend/.env.docker
+frontend/.env.local
+frontend/.env.*.local
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -208,3 +214,7 @@ __marimo__/
 
 
 config.json
+config.docker.json
+.react-router/
+node_modules/
+apps/

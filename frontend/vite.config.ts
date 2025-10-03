@@ -25,12 +25,12 @@ export default defineConfig(({ mode }) => {
       // Proxy configuration for development
       proxy: {
         '/api': {
-          target: env.VITE_API_BASE_URL || 'http://localhost:8000',
+          target: env.VITE_API_BASE_URL || 'http://localhost:8026',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
         },
         '/ws': {
-          target: env.VITE_WS_BASE_URL || 'ws://localhost:8000',
+          target: env.VITE_WS_BASE_URL || 'ws://localhost:8026',
           ws: true,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/ws/, ''),

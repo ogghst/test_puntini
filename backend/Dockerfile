@@ -16,10 +16,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Copy the docker-specific configuration file to the default config.json
-COPY config.json.docker config.json
+# This file should exist as backend/config.docker.json in the repository
+COPY config.docker.json config.json
 
 # Expose the port the app runs on
-EXPOSE 8025
+EXPOSE 8026
 
 # Define the command to run the application
 CMD ["python", "run_server.py"]

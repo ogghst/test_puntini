@@ -96,7 +96,6 @@ interface EnvironmentVariables {
   NODE_ENV?: string;
   VITE_APP_ENV?: string;
 }
-
 /**
  * Configuration manager class
  */
@@ -145,7 +144,6 @@ class ConfigManager {
       NODE_ENV: import.meta.env.NODE_ENV,
       VITE_APP_ENV: import.meta.env.VITE_APP_ENV,
     };
-
     // Load configuration from environment variables
     this.config = this.loadConfiguration();
   }
@@ -215,11 +213,37 @@ class ConfigManager {
   }
 
   /**
+   * Get environment variable with fallback
+   */
+  private getEnv(key: string, defaultValue: string): string {
+    return import.meta.env[key] || defaultValue;
+  }
+
+  /**
+   * Get environment variable as number with fallback
+   */
+  private getEnvNumber(key: string, defaultValue: number): number {
+    const value = import.meta.env[key];
+    if (value === undefined || value === '') return defaultValue;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? defaultValue : parsed;
+  }
+
+  /**
+   * Get environment variable as boolean with fallback
+   */
+  private getEnvBoolean(key: string, defaultValue: boolean): boolean {
+    const value = import.meta.env[key];
+    if (value === undefined || value === '') return defaultValue;
+    return value.toLowerCase() === 'true' || value === '1';
+  }
+
+  /**
    * Check if running in development mode
    */
   private isDevelopmentMode(): boolean {
-    return this.environment.NODE_ENV === 'development' || 
-           this.environment.NODE_ENV === 'dev' ||
+    return import.meta.env.NODE_ENV === 'development' || 
+           import.meta.env.NODE_ENV === 'dev' ||
            import.meta.env.DEV;
   }
 

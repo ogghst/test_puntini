@@ -20,38 +20,157 @@ For detailed architectural information, see [AGENTS.md](AGENTS.md).
 
 ## Quick Start
 
-### Backend Setup
+### Option 1: Docker (Recommended)
 
-1.  **Navigate to the backend directory:**
-    ```bash
-    cd apps/backend
-    ```
-2.  **Create a virtual environment and install the dependencies:**
-    ```bash
-    python -m venv .venv
-    source .venv/bin/activate
-    pip install -r requirements.txt
+The easiest way to run the application is with Docker:
 
-    ```
-3.  **Run the development server:**
-    ```bash
-    python run_server.py
-    ```
+```bash
+# Full stack with all services (Neo4j, Ollama, Langfuse)
+docker-compose up -d
 
-### Frontend Setup
+# Minimal setup (just frontend and backend in one container)
+docker-compose -f docker-compose-minimal.yml up -d
+```
 
-1.  **Navigate to the frontend directory:**
-    ```bash
-    cd apps/frontend
-    ```
-2.  **Install the dependencies:**
-    ```bash
-    npm install
-    ```
-3.  **Run the development server:**
-    ```bash
-    npm run dev
-    ```
+**Access the application:**
+- Frontend: http://localhost:8025
+- Backend API: http://localhost:8026
+- API Docs: http://localhost:8026/docs
+
+For detailed Docker setup instructions, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
+
+### Option 2: Local Installation
+
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+### Basic Usage
+
+```python
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend'))
+
+from puntini import create_simple_agent, create_console_tracer
+from puntini.utils.settings import settings
+
+# Create agent and tracer
+agent = create_simple_agent()
+tracer = create_console_tracer()
+
+# Define a goal
+goal = "Create a node called 'Example' with type 'demo'"
+
+# Prepare initial state
+initial_state = {
+    "goal": goal,
+    "plan": [],
+    "progress": [],
+    "failures": [],
+    "retry_count": 0,
+    "max_retries": settings.max_retries,
+    "messages": [],
+    "current_step": "parse_goal",
+    "current_attempt": 1,
+    "artifacts": [],
+    "result": {},
+    "_tool_signature": {},
+    "_error_context": {},
+    "_escalation_context": {}
+}
+
+# Run the agent
+from langfuse.langchain import CallbackHandler
+from langfuse import Langfuse
+from langfuse import get_client
+import uuid
+
+# Setup tracing
+langfuse_handler = CallbackHandler()
+thread_id = str(uuid.uuid4())
+config = {"configurable": {"thread_id": thread_id}, "callbacks": [langfuse_handler]}
+
+# Create LLM for the graph context
+from puntini.llm.llm_models import LLMFactory
+llm_factory = LLMFactory()
+llm = llm_factory.get_default_llm()
+
+# Pass LLM through context
+context = {"llm": llm}
+
+# Run the agent
+result = agent.invoke(initial_state, config=config, context=context)
+print(f"Result: {result}")
+```
+
+### CLI Usage
+
+```bash
+cd backend
+
+# Run with a goal
+python -m puntini.cli run --goal "Create a node called 'Test'"
+
+# Show configuration
+python -m puntini.cli config-show
+
+# Run tests
+python -m puntini.cli test
+
+# Generate example configuration
+python -m puntini.cli example
+```
+
+### Web API Usage
+
+```bash
+cd backend
+
+# Start the server
+python run_server.py
+
+# Or use the CLI
+python -m puntini.cli run-server
+```
+
+## Configuration
+
+Create a `config.json` file with your configuration (see `config.json.example` for a full example):
+
+```json
+{
+  "langfuse": {
+    "secret_key": "your_secret_key_here",
+    "public_key": "your_public_key_here",
+    "host": "https://cloud.langfuse.com"
+  },
+  "llm": {
+    "default_llm": "openai-gpt4",
+    "providers": [
+      {
+        "name": "openai-gpt4",
+        "type": "openai",
+        "api_key": "your_openai_api_key_here",
+        "model_name": "gpt-4",
+        "temperature": 0.0,
+        "enabled": true
+      }
+    ]
+  },
+  "neo4j": {
+    "uri": "bolt://localhost:7687",
+    "username": "neo4j",
+    "password": "password"
+  },
+  "agent": {
+    "max_retries": 3,
+    "checkpointer_type": "memory",
+    "tracer_type": "console"
+  }
+}
+```
 
 ## Architecture
 
@@ -105,90 +224,44 @@ isort puntini/
 mypy puntini/
 ```
 
-## Docker
+## Docker Deployment
 
-The application can be run in Docker containers. There are separate Docker images for the backend API and frontend application.
+The application provides three Docker images for flexible deployment:
 
-### Backend Docker Image
+### 1. Backend Image (`backend/Dockerfile`)
+- Standalone Python backend service
+- Port: 8026
+- Config: `backend/config.docker.json`
 
-The backend Docker image exposes port 8025 for the web API.
+### 2. Frontend Image (`frontend/Dockerfile`)
+- Standalone React frontend service
+- Port: 8025
+- Config: `frontend/.env.docker`
 
-#### Building the Backend Docker Image
+### 3. Combined Image (`Dockerfile.combined`)
+- Single container with both services
+- Ports: 8025 (frontend), 8026 (backend)
+- Uses same config files as standalone images
 
+**Build individual images:**
 ```bash
-cd backend
-docker build -t puntini-backend:latest .
+# Backend
+docker build -t puntini-backend -f backend/Dockerfile backend/
+
+# Frontend
+docker build -t puntini-frontend -f frontend/Dockerfile .
+
+# Combined
+docker build -t puntini-combined -f Dockerfile.combined .
 ```
 
-#### Running the Backend Docker Container
-
-```bash
-docker run -p 8025:8025 puntini-backend:latest
-```
-
-The API will be available at http://localhost:8025
-
-### Frontend Docker Image
-
-The frontend Docker image exposes port 8026 for the web application and connects to the backend API at http://localhost:8025.
-
-#### Building the Frontend Docker Image
-
-```bash
-cd frontend
-docker build -t puntini-frontend:latest .
-```
-
-#### Running the Frontend Docker Container
-
-```bash
-docker run -p 8026:8026 puntini-frontend:latest
-```
-
-The frontend will be available at http://localhost:8026
-
-### Running Both Containers
-
-To run both the backend and frontend containers together:
-
-```bash
-# Start the backend
-docker run -d --name puntini-backend -p 8025:8025 puntini-backend:latest
-
-# Start the frontend
-docker run -d --name puntini-frontend -p 8026:8026 puntini-frontend:latest
-
-# Access the frontend at http://localhost:8026
-# The frontend will connect to the backend at http://localhost:8025
-```
-
-## GitHub Actions
-
-The project includes GitHub Actions workflows for automated testing and building of Docker images:
-
-### Backend Workflow
-
-Located at `.github/workflows/backend-docker.yml`, this workflow:
-- Builds the backend Docker image on pushes to main branch
-- Runs tests to verify the container works correctly
-- Only triggers on changes to backend files
-
-### Frontend Workflow
-
-Located at `.github/workflows/frontend-docker.yml`, this workflow:
-- Builds the frontend Docker image on pushes to main branch
-- Runs tests to verify the container works correctly
-- Only triggers on changes to frontend files
-
-There is also a `.github/workflows/docker-publish.yml` workflow that publishes the backend Docker image to Docker Hub.
-
-All workflows use Docker Buildx for efficient building and caching.
+For more details, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
 
 ## API Documentation
 
 When running the server, API documentation is available at:
-- Swagger UI: http://localhost:8025/docs
-- ReDoc: http://localhost:8025/redoc
+- Docker: http://localhost:8026/docs (Swagger UI) and http://localhost:8026/redoc (ReDoc)
+- Local: http://localhost:8000/docs (Swagger UI) and http://localhost:8000/redoc (ReDoc)
 
 ## License
 

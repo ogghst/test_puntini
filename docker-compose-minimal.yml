@@ -1,0 +1,17 @@
+services:
+  combined:
+    build:
+      context: .
+      dockerfile: Dockerfile.combined
+    ports:
+      - "8025:8025"  # Frontend port
+      - "8026:8026"  # Backend port
+    environment:
+      - PYTHONPATH=/app
+    networks:
+      - puntini-network
+    restart: unless-stopped
+
+networks:
+  puntini-network:
+    driver: bridge

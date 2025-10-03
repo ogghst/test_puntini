@@ -4,3 +4,13 @@
 # React Router
 /.react-router/
 /build/
+
+# Environment files (keep .env.example in git)
+.env
+.env.docker
+.env.local
+.env.*.local
+
+node_modules/
+
+
