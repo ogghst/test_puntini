@@ -72,7 +72,7 @@ class ConfigManager {
   private loadConfiguration(): AppConfig {
     const config: AppConfig = {
       api: {
-        baseUrl: this.getEnv('VITE_API_BASE_URL', 'http://localhost:8000'),
+        baseUrl: this.getEnv('VITE_API_BASE_URL', 'http://localhost:8026'),
         timeout: this.getEnvNumber('VITE_API_TIMEOUT', 30000),
         retryAttempts: this.getEnvNumber('VITE_API_RETRY_ATTEMPTS', 3),
         retryDelay: this.getEnvNumber('VITE_API_RETRY_DELAY', 1000),
@@ -233,7 +233,7 @@ class ConfigManager {
    * Get WebSocket URL
    */
   getWebSocketUrl(): string {
-    const wsBaseUrl = this.environment.VITE_WS_BASE_URL || 
+    const wsBaseUrl = this.getEnv('VITE_WS_BASE_URL', '') || 
                      this.config.api.baseUrl.replace(/^http/, 'ws');
     return wsBaseUrl;
   }
