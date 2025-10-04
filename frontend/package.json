@@ -13,10 +13,13 @@
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.1",
     "@radix-ui/react-scroll-area": "^1.1.0",
+    "@radix-ui/react-slot": "^1.2.3",
     "@react-router/node": "^7.7.1",
     "@react-router/serve": "^7.7.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cytoscape": "^3.28.1",
+    "cytoscape-dagre": "^2.5.0",
     "isbot": "^5.1.27",
     "lucide-react": "^0.542.0",
     "react": "^19.1.0",
@@ -29,6 +32,7 @@
   "devDependencies": {
     "@react-router/dev": "^7.7.1",
     "@tailwindcss/vite": "^4.1.13",
+    "@types/cytoscape": "^3.19.14",
     "@types/node": "^20",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storage Cleanup - Puntini Agent</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #c82333;
+        }
+        button.secondary {
+            background: #6c757d;
+        }
+        button.secondary:hover {
+            background: #5a6268;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .status.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .console-info {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 Storage Cleanup Tool</h1>
+        
+        <div class="warning">
+            <strong>⚠️ Warning:</strong> This tool will clear all authentication and session data from your browser. 
+            You will need to log in again after using this tool.
+        </div>
+        
+        <div class="info">
+            <strong>ℹ️ When to use this:</strong> If you're experiencing issues like:
+            <ul>
+                <li>Login button hanging or not responding</li>
+                <li>Authentication loops</li>
+                <li>Session management errors</li>
+                <li>Inconsistent login states</li>
+            </ul>
+        </div>
+        
+        <button onclick="clearAuthData()">Clear Authentication Data</button>
+        <button onclick="clearSessionData()" class="secondary">Clear All Session Data</button>
+        <button onclick="checkStorageStatus()" class="secondary">Check Storage Status</button>
+        
+        <div id="status" class="status"></div>
+        
+        <div class="console-info">
+            <strong>For developers:</strong> You can also use these commands in the browser console:<br>
+            <code>window.clearAuthData()</code> - Clear auth data<br>
+            <code>window.clearSessionData()</code> - Clear all session data<br>
+            <code>window.performStorageCleanup()</code> - Smart cleanup with migration<br>
+            <code>window.checkAuthData()</code> - Check for data inconsistencies
+        </div>
+    </div>
+
+    <script>
+        // Storage cleanup functions
+        function clearAuthData() {
+            try {
+                // Clear config-based keys
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('authUser');
+                sessionStorage.removeItem('authToken');
+                sessionStorage.removeItem('authUser');
+                
+                // Clear any legacy keys
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('authUser');
+                sessionStorage.removeItem('authToken');
+                sessionStorage.removeItem('authUser');
+                
+                showStatus('✅ Authentication data cleared successfully! You can now close this tab and try logging in again.', 'success');
+            } catch (error) {
+                showStatus('❌ Error clearing authentication data: ' + error.message, 'error');
+            }
+        }
+        
+        function clearSessionData() {
+            try {
+                // Clear all authentication and session data
+                clearAuthData();
+                
+                // Clear additional session data
+                localStorage.removeItem('currentSession');
+                localStorage.removeItem('sessionId');
+                sessionStorage.removeItem('currentSession');
+                sessionStorage.removeItem('sessionId');
+                
+                showStatus('✅ All session data cleared successfully! You can now close this tab and try logging in again.', 'success');
+            } catch (error) {
+                showStatus('❌ Error clearing session data: ' + error.message, 'error');
+            }
+        }
+        
+        function checkStorageStatus() {
+            try {
+                const authConfig = { tokenStorageKey: 'authToken', userStorageKey: 'authUser' };
+                
+                const configToken = localStorage.getItem(authConfig.tokenStorageKey);
+                const configUser = localStorage.getItem(authConfig.userStorageKey);
+                const hardcodedToken = localStorage.getItem('authToken');
+                const hardcodedUser = localStorage.getItem('authUser');
+                
+                const hasConfigData = !!(configToken || configUser);
+                const hasHardcodedData = !!(hardcodedToken || hardcodedUser);
+                const isInconsistent = hasConfigData && hasHardcodedData || (!hasConfigData && hasHardcodedData);
+                
+                let message = '📊 Storage Status:\n';
+                message += `• Config-based data: ${hasConfigData ? 'Found' : 'Not found'}\n`;
+                message += `• Hardcoded data: ${hasHardcodedData ? 'Found' : 'Not found'}\n`;
+                message += `• Status: ${isInconsistent ? '⚠️ Inconsistent - cleanup recommended' : '✅ Consistent'}`;
+                
+                showStatus(message, isInconsistent ? 'error' : 'success');
+            } catch (error) {
+                showStatus('❌ Error checking storage status: ' + error.message, 'error');
+            }
+        }
+        
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+        }
+        
+        // Make functions available globally for console use
+        window.clearAuthData = clearAuthData;
+        window.clearSessionData = clearSessionData;
+        window.checkStorageStatus = checkStorageStatus;
+    </script>
+</body>
+</html>

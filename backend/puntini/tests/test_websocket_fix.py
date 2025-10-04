@@ -95,6 +95,100 @@ class TestWebSocketFix:
         params = list(sig.parameters.keys())
         assert 'websocket' in params, f"Missing 'websocket' parameter: {params}"
         assert 'token' in params, f"Missing 'token' parameter: {params}"
+    
+    @pytest.mark.asyncio
+    async def test_send_message_to_closed_connection(self):
+        """Test that sending messages to closed connections is handled gracefully."""
+        # Mock dependencies
+        mock_websocket = AsyncMock()
+        mock_websocket.client_state = MagicMock()
+        mock_websocket.client_state.name = "DISCONNECTED"  # Simulate closed connection
+        mock_websocket.send_text = AsyncMock()
+        
+        # Mock authentication
+        with patch('puntini.api.websocket.get_current_user_websocket') as mock_auth:
+            mock_auth.return_value = "testuser"
+            
+            # Create WebSocket manager
+            session_manager = SessionManager()
+            ws_manager = WebSocketManager(session_manager)
+            
+            # Connect first
+            session_id = await ws_manager.connect(mock_websocket, "valid_token")
+            assert session_id is not None
+            
+            # Simulate connection being closed by client
+            mock_websocket.client_state.name = "DISCONNECTED"
+            
+            # Try to send a message
+            from puntini.api.models import Ping
+            message = Ping(session_id=session_id)
+            
+            # Should return False and clean up the connection
+            result = await ws_manager.send_message(session_id, message)
+            assert result is False
+            
+            # Connection should be cleaned up
+            assert session_id not in ws_manager.active_connections
+    
+    @pytest.mark.asyncio
+    async def test_send_message_runtime_error_handling(self):
+        """Test that RuntimeError from closed WebSocket is handled gracefully."""
+        # Mock dependencies
+        mock_websocket = AsyncMock()
+        mock_websocket.client_state = MagicMock()
+        mock_websocket.client_state.name = "CONNECTED"
+        mock_websocket.send_text = AsyncMock()
+        
+        # Make send_text raise the specific RuntimeError
+        mock_websocket.send_text.side_effect = RuntimeError('Cannot call "send" once a close message has been sent.')
+        
+        # Mock authentication
+        with patch('puntini.api.websocket.get_current_user_websocket') as mock_auth:
+            mock_auth.return_value = "testuser"
+            
+            # Create WebSocket manager
+            session_manager = SessionManager()
+            ws_manager = WebSocketManager(session_manager)
+            
+            # Connect first
+            session_id = await ws_manager.connect(mock_websocket, "valid_token")
+            assert session_id is not None
+            
+            # Try to send a message
+            from puntini.api.models import Ping
+            message = Ping(session_id=session_id)
+            
+            # Should return False and clean up the connection
+            result = await ws_manager.send_message(session_id, message)
+            assert result is False
+            
+            # Connection should be cleaned up
+            assert session_id not in ws_manager.active_connections
+    
+    def test_is_connection_alive(self):
+        """Test the is_connection_alive helper method."""
+        # Create WebSocket manager
+        session_manager = SessionManager()
+        ws_manager = WebSocketManager(session_manager)
+        
+        # Test with non-existent session
+        assert ws_manager.is_connection_alive("nonexistent") is False
+        
+        # Mock a connected WebSocket
+        mock_websocket = AsyncMock()
+        mock_websocket.client_state = MagicMock()
+        mock_websocket.client_state.name = "CONNECTED"
+        
+        # Add to active connections
+        ws_manager.active_connections["test_session"] = mock_websocket
+        
+        # Should return True for connected session
+        assert ws_manager.is_connection_alive("test_session") is True
+        
+        # Simulate disconnected state
+        mock_websocket.client_state.name = "DISCONNECTED"
+        assert ws_manager.is_connection_alive("test_session") is False
 
 
 if __name__ == "__main__":
@@ -106,6 +200,9 @@ if __name__ == "__main__":
         await test.test_websocket_connection_flow()
         await test.test_websocket_connection_auth_failure()
         test.test_websocket_endpoint_signature()
+        await test.test_send_message_to_closed_connection()
+        await test.test_send_message_runtime_error_handling()
+        test.test_is_connection_alive()
         print("All WebSocket fix tests passed!")
     
     asyncio.run(run_tests())

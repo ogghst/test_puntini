@@ -78,11 +78,11 @@ class TestComplexGraphScenarios:
         
         # Test organizational queries
         # Find all direct reports of CTO
-        cto_reports = graph_store.get_subgraph(MatchSpec(label="Employee", key="cto"), depth=1)
+        cto_reports = graph_store.get_subgraph(MatchSpec(label="Employee", key="cto"), depth=1, direction="incoming")
         assert len(cto_reports["nodes"]) == 2  # CTO + 1 direct report
         
         # Find entire reporting chain from CEO
-        ceo_chain = graph_store.get_subgraph(MatchSpec(label="Employee", key="ceo"), depth=3)
+        ceo_chain = graph_store.get_subgraph(MatchSpec(label="Employee", key="ceo"), depth=4, direction="incoming")
         assert len(ceo_chain["nodes"]) == 5  # All employees
         
         # Test promotion (update properties)
@@ -354,7 +354,7 @@ class TestComplexGraphScenarios:
         
         # Test property-based filtering
         complex_populated_graph.update_props(
-            MatchSpec(label="Person", properties={"age": 30}),
+            MatchSpec(label="Person", properties={"age": 28}),
             {"senior": True}
         )
         

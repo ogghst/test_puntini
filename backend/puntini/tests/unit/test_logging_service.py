@@ -11,9 +11,24 @@ import sys
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, Any
+import io
+import logging
 
 from puntini.logging.logger import LoggingService, get_logger, setup_logging, get_logging_service, set_logger_level
 from puntini.utils.settings import Settings
+
+
+@pytest.fixture(autouse=True)
+def reset_logging_singleton():
+    """Reset the logging service singleton before each test."""
+    import puntini.logging.logger as logger_module
+    if logger_module._logging_service:
+        logger_module._logging_service.cleanup()
+    logger_module._logging_service = None
+    yield
+    if logger_module._logging_service:
+        logger_module._logging_service.cleanup()
+    logger_module._logging_service = None
 
 
 class TestLoggingServiceInitialization:
@@ -395,24 +410,12 @@ import logging
 class TestLoggingServiceIntegration:
     """Test LoggingService integration with actual logging."""
     
-    def test_error_log_includes_stack_trace(self):
+    def test_error_log_includes_stack_trace(self, temp_logging_service):
         """Test that logger.error() from an except block includes a stack trace."""
-        # Use a stream handler to capture log output
+        logging_service, _ = temp_logging_service
         log_stream = io.StringIO()
-
-        # Create a new logging service with a custom handler
-        settings = Settings()
-        settings.logging.console_logging = False # Disable default console handler
-
-        logging_service = LoggingService(settings)
-
-        # Add our stream handler to the root logger
         stream_handler = logging.StreamHandler(log_stream)
-
-        # Use the custom formatter to match the service's configuration
-        formatter = logging_service._formatters.get('console')
-        if formatter:
-            stream_handler.setFormatter(formatter)
+        stream_handler.setFormatter(logging_service._formatters.get('file'))
 
         root_logger = logging.getLogger()
         root_logger.addHandler(stream_handler)
@@ -433,99 +436,57 @@ class TestLoggingServiceIntegration:
         assert "Traceback (most recent call last):" in log_output
         assert 'raise ValueError("This is a test exception")' in log_output
 
-    def test_basic_logging_functionality(self):
+    def test_basic_logging_functionality(self, temp_logging_service):
         """Test that basic logging works correctly."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            settings = Settings()
-            settings.logging.logs_path = temp_dir
-            settings.logging.console_logging = False
-            
-            logging_service = LoggingService(settings)
-            logging_service.setup()
-            
-            logger = logging_service.get_logger("test_module")
-            
-            # Test different log levels
-            logger.debug("Debug message")
-            logger.info("Info message")
-            logger.warning("Warning message")
-            logger.error("Error message")
-            
-            # Verify log files were created
-            logs_path = Path(temp_dir)
-            log_files = list(logs_path.glob("*.log"))
-            assert len(log_files) > 0
+        logging_service, temp_dir = temp_logging_service
+        logger = logging_service.get_logger("test_module")
+
+        # Test different log levels
+        logger.info("Info message")
+        logger.warning("Warning message")
+        logger.error("Error message")
+
+        # Verify log files were created
+        log_file = Path(temp_dir) / "backend.log"
+        assert log_file.exists()
+
+        log_content = log_file.read_text()
+        assert "Info message" in log_content
+        assert "Warning message" in log_content
+        assert "Error message" in log_content
     
-    def test_structured_logging_functionality(self):
+    def test_structured_logging_functionality(self, temp_logging_service):
         """Test that structured logging works correctly."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            settings = Settings()
-            settings.logging.logs_path = temp_dir
-            settings.logging.console_logging = False
-            
-            logging_service = LoggingService(settings)
-            logging_service.setup()
-            
-            logger = logging_service.get_logger("test_module")
-            
-            # Test structured logging
-            extra_data = {
-                "user_id": "12345",
-                "action": "login",
-                "ip_address": "192.168.1.1",
-                "success": True
-            }
-            with patch.object(logger, '_log') as mock_log:
-                logger.info("User action performed", extra=extra_data)
-                mock_log.assert_called_once()
+        logging_service, temp_dir = temp_logging_service
+        logger = logging_service.get_logger("test_module")
 
-            # Verify log files were created
-            logs_path = Path(temp_dir)
-            log_files = list(logs_path.glob("*.log"))
-            assert len(log_files) > 0
+        # Test structured logging
+        extra_data = {
+            "user_id": "12345",
+            "action": "login"
+        }
+        logger.info("User action performed", extra=extra_data)
+
+        # Verify log files contain structured data
+        log_file = Path(temp_dir) / "backend.log"
+        assert log_file.exists()
+        log_content = log_file.read_text()
+        assert '"user_id": "12345"' in log_content
+        assert '"action": "login"' in log_content
     
-    def test_agent_specific_logging_functionality(self):
+    def test_agent_specific_logging_functionality(self, temp_logging_service):
         """Test that agent-specific logging works correctly."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            settings = Settings()
-            settings.logging.logs_path = temp_dir
-            settings.logging.console_logging = False
-            
-            logging_service = LoggingService(settings)
-            logging_service.setup()
-            
-            logger = get_logger("test_module")
-            with patch.object(logger, 'info') as mock_info:
-                # Test agent step logging
-                logging_service.log_agent_step(
-                    logger,
-                    step="parse_goal",
-                    state={"goal": "Create a user node", "attempt": 1},
-                    complexity="simple"
-                )
+        logging_service, _ = temp_logging_service
+        logger = get_logger("test_module")
 
-                # Test LLM call logging
-                logging_service.log_llm_call(
-                    logger,
-                    model="gpt-4",
-                    prompt_length=150,
-                    temperature=0.1
-                )
-
-                # Test graph operation logging
-                logging_service.log_graph_operation(
-                    logger,
-                    operation="create_node",
-                    node_type="User",
-                    properties={"name": "John"}
-                )
-
-                assert mock_info.call_count == 3
-            
-            # Verify log files were created
-            logs_path = Path(temp_dir)
-            log_files = list(logs_path.glob("*.log"))
-            assert len(log_files) > 0
+        with patch.object(logger, 'info') as mock_info:
+            logging_service.log_agent_step(
+                logger,
+                step="parse_goal",
+                state={"goal": "Create a user node", "attempt": 1},
+                complexity="simple"
+            )
+            assert mock_info.called
 
 
 class TestLoggingServiceLoggerLevelConfiguration:

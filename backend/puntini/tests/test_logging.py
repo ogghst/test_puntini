@@ -12,15 +12,24 @@ from puntini.logging import setup_logging, get_logger, LoggingService
 from puntini.utils.settings import Settings
 
 
+@pytest.fixture(autouse=True)
+def reset_logging_singleton():
+    """Reset the logging service singleton before each test."""
+    import puntini.logging.logger as logger_module
+    if logger_module._logging_service:
+        logger_module._logging_service.cleanup()
+    logger_module._logging_service = None
+    yield
+    if logger_module._logging_service:
+        logger_module._logging_service.cleanup()
+    logger_module._logging_service = None
+
+
 class TestLoggingSystem:
     """Test cases for the logging system."""
     
     def test_logging_service_singleton(self):
         """Test that logging service is properly managed as singleton."""
-        # Clear global state
-        import puntini.logging.logger as logger_module
-        logger_module._logging_service = None
-        
         # Setup logging
         settings = Settings()
         service1 = setup_logging(settings)

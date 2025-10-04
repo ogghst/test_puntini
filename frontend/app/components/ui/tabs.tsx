@@ -1,5 +1,5 @@
 import { forwardRef, cloneElement, Children, isValidElement, useState } from "react";
-import { cn } from "../../utils/utils";
+import { cn } from "../../lib/utils";
 
 const Tabs = forwardRef<
   HTMLDivElement,

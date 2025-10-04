@@ -1,4 +1,6 @@
-# Puntini Agent
+# Puntini
+
+![puntini](docs/puntini.png)
 
 A controllable, observable multi-tool agent for graph manipulation using LangGraph + LangChain, with progressive context disclosure, intelligent escalation, strict contracts, and production-grade instrumentation via Langfuse.
 
@@ -39,136 +41,36 @@ For detailed Docker setup instructions, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
 
 ### Option 2: Local Installation
 
-```bash
-cd backend
-pip install -r requirements.txt
-```
+1.  **Navigate to the backend directory:**
+    ```bash
+    cd apps/backend
+    ```
+2.  **Create a virtual environment and install the dependencies:**
+    ```bash
+    python -m venv .venv
+    source .venv/bin/activate
+    pip install -r requirements.txt
 
-### Basic Usage
+    ```
+3.  **Run the development server:**
+    ```bash
+    python run_server.py
+    ```
 
-```python
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend'))
+### Frontend Setup
 
-from puntini import create_simple_agent, create_console_tracer
-from puntini.utils.settings import settings
-
-# Create agent and tracer
-agent = create_simple_agent()
-tracer = create_console_tracer()
-
-# Define a goal
-goal = "Create a node called 'Example' with type 'demo'"
-
-# Prepare initial state
-initial_state = {
-    "goal": goal,
-    "plan": [],
-    "progress": [],
-    "failures": [],
-    "retry_count": 0,
-    "max_retries": settings.max_retries,
-    "messages": [],
-    "current_step": "parse_goal",
-    "current_attempt": 1,
-    "artifacts": [],
-    "result": {},
-    "_tool_signature": {},
-    "_error_context": {},
-    "_escalation_context": {}
-}
-
-# Run the agent
-from langfuse.langchain import CallbackHandler
-from langfuse import Langfuse
-from langfuse import get_client
-import uuid
-
-# Setup tracing
-langfuse_handler = CallbackHandler()
-thread_id = str(uuid.uuid4())
-config = {"configurable": {"thread_id": thread_id}, "callbacks": [langfuse_handler]}
-
-# Create LLM for the graph context
-from puntini.llm.llm_models import LLMFactory
-llm_factory = LLMFactory()
-llm = llm_factory.get_default_llm()
-
-# Pass LLM through context
-context = {"llm": llm}
-
-# Run the agent
-result = agent.invoke(initial_state, config=config, context=context)
-print(f"Result: {result}")
-```
-
-### CLI Usage
-
-```bash
-cd backend
-
-# Run with a goal
-python -m puntini.cli run --goal "Create a node called 'Test'"
-
-# Show configuration
-python -m puntini.cli config-show
-
-# Run tests
-python -m puntini.cli test
-
-# Generate example configuration
-python -m puntini.cli example
-```
-
-### Web API Usage
-
-```bash
-cd backend
-
-# Start the server
-python run_server.py
-
-# Or use the CLI
-python -m puntini.cli run-server
-```
-
-## Configuration
-
-Create a `config.json` file with your configuration (see `config.json.example` for a full example):
-
-```json
-{
-  "langfuse": {
-    "secret_key": "your_secret_key_here",
-    "public_key": "your_public_key_here",
-    "host": "https://cloud.langfuse.com"
-  },
-  "llm": {
-    "default_llm": "openai-gpt4",
-    "providers": [
-      {
-        "name": "openai-gpt4",
-        "type": "openai",
-        "api_key": "your_openai_api_key_here",
-        "model_name": "gpt-4",
-        "temperature": 0.0,
-        "enabled": true
-      }
-    ]
-  },
-  "neo4j": {
-    "uri": "bolt://localhost:7687",
-    "username": "neo4j",
-    "password": "password"
-  },
-  "agent": {
-    "max_retries": 3,
-    "checkpointer_type": "memory",
-    "tracer_type": "console"
-  }
-}
-```
+1.  **Navigate to the frontend directory:**
+    ```bash
+    cd apps/frontend
+    ```
+2.  **Install the dependencies:**
+    ```bash
+    npm install
+    ```
+3.  **Run the development server:**
+    ```bash
+    npm run dev
+    ```
 
 ## Architecture
 

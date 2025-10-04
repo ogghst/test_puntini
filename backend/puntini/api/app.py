@@ -18,9 +18,10 @@ from pydantic import BaseModel
 from .auth import AuthManager, get_current_user, auth_manager
 from .session import session_manager
 from .websocket import websocket_manager
-from .models import Message, UserPrompt, AssistantResponse, Error
+from .models import Message, UserPrompt, AssistantResponse, Error, GraphDataResponse, GraphNodeResponse, GraphEdgeResponse, SubgraphRequest, SubgraphResponse
 from ..utils.settings import Settings
 from ..logging import get_logger, setup_logging
+from ..models.specs import MatchSpec
 
 from fastapi import WebSocket
 
@@ -213,6 +214,164 @@ def create_app(settings: Settings = None) -> FastAPI:
         stats = websocket_manager.get_connection_stats()
         return ConnectionStatsResponse(**stats)
     
+    # Graph endpoints
+    @app.get("/graph", response_model=GraphDataResponse)
+    async def get_graph_data(current_user: str = Depends(get_current_user)):
+        """Get complete graph data from user's default session."""
+        graph_logger = get_logger("puntini.api.graph")
+        graph_logger.info(f"Graph data request from user: {current_user}")
+        
+        try:
+            # Get user's sessions and use the first active one
+            user_sessions = session_manager.get_user_sessions(current_user)
+            if not user_sessions:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No active sessions found for user"
+                )
+            
+            # Use the first active session's graph store
+            session_data = user_sessions[0]
+            graph_store = session_data.graph_store
+            if not graph_store:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Graph store not available in session"
+                )
+            
+            # Get all nodes and edges
+            nodes = graph_store.get_all_nodes()
+            edges = graph_store.get_all_edges()
+            
+            # Convert to response format
+            node_responses = [
+                GraphNodeResponse(
+                    id=str(node.id),
+                    label=node.label,
+                    key=node.key,
+                    properties=node.properties,
+                    created_at=node.created_at.isoformat() if node.created_at else None,
+                    updated_at=node.updated_at.isoformat() if node.updated_at else None,
+                )
+                for node in nodes
+            ]
+            
+            edge_responses = [
+                GraphEdgeResponse(
+                    id=str(edge.id),
+                    relationship_type=edge.relationship_type,
+                    source_id=str(edge.source_id),
+                    target_id=str(edge.target_id),
+                    source_key=edge.source_key,
+                    target_key=edge.target_key,
+                    source_label=edge.source_label,
+                    target_label=edge.target_label,
+                    properties=edge.properties,
+                    created_at=edge.created_at.isoformat() if edge.created_at else None,
+                    updated_at=edge.updated_at.isoformat() if edge.updated_at else None,
+                )
+                for edge in edges
+            ]
+            
+            graph_logger.info(f"Returning graph data: {len(nodes)} nodes, {len(edges)} edges")
+            
+            return GraphDataResponse(
+                nodes=node_responses,
+                edges=edge_responses,
+                total_nodes=len(nodes),
+                total_edges=len(edges)
+            )
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            graph_logger.error(f"Error retrieving graph data: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to retrieve graph data: {str(e)}"
+            )
+    
+    @app.post("/graph/subgraph", response_model=SubgraphResponse)
+    async def get_subgraph(
+        request: SubgraphRequest,
+        current_user: str = Depends(get_current_user)
+    ):
+        """Get a subgraph around matching nodes from user's default session."""
+        graph_logger = get_logger("puntini.api.graph")
+        graph_logger.info(f"Subgraph request from user: {current_user}")
+        
+        try:
+            # Get user's sessions and use the first active one
+            user_sessions = session_manager.get_user_sessions(current_user)
+            if not user_sessions:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No active sessions found for user"
+                )
+            
+            # Use the first active session's graph store
+            session_data = user_sessions[0]
+            graph_store = session_data.graph_store
+            if not graph_store:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Graph store not available in session"
+                )
+            
+            # Create match spec from request
+            match_spec = MatchSpec(**request.match_spec)
+            
+            # Get subgraph
+            subgraph_data = graph_store.get_subgraph(match_spec, request.depth)
+            
+            # Convert to response format
+            node_responses = [
+                GraphNodeResponse(
+                    id=node['id'],
+                    label=node['label'],
+                    key=node['key'],
+                    properties=node['properties'],
+                    created_at=node.get('created_at'),
+                    updated_at=node.get('updated_at'),
+                )
+                for node in subgraph_data['nodes']
+            ]
+            
+            edge_responses = [
+                GraphEdgeResponse(
+                    id=edge['id'],
+                    relationship_type=edge['relationship_type'],
+                    source_id=edge['source_id'],
+                    target_id=edge['target_id'],
+                    source_key=edge['source_key'],
+                    target_key=edge['target_key'],
+                    source_label=edge['source_label'],
+                    target_label=edge['target_label'],
+                    properties=edge['properties'],
+                    created_at=edge.get('created_at'),
+                    updated_at=edge.get('updated_at'),
+                )
+                for edge in subgraph_data['edges']
+            ]
+            
+            graph_logger.info(f"Returning subgraph: {len(node_responses)} nodes, {len(edge_responses)} edges")
+            
+            return SubgraphResponse(
+                nodes=node_responses,
+                edges=edge_responses,
+                depth=subgraph_data['depth'],
+                central_nodes=subgraph_data['central_nodes']
+            )
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            graph_logger.error(f"Error retrieving subgraph: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to retrieve subgraph: {str(e)}"
+            )
+
     # Health check endpoint
     @app.get("/health")
     async def health_check():

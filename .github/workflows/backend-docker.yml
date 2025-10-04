@@ -1,0 +1,36 @@
+name: Backend Docker Build and Test
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Build backend Docker image
+      run: |
+        cd backend
+        docker build -t puntini-backend-test .
+    
+    - name: Test backend Docker image
+      run: |
+        cd backend
+        docker run -d --name puntini-backend-test -p 8025:8025 puntini-backend-test
+        sleep 10
+        docker ps | grep puntini-backend-test
+        docker logs puntini-backend-test
+        docker stop puntini-backend-test

@@ -14,8 +14,6 @@ import {
   Edit3,
   // Trash2,
   Filter,
-  Plus,
-  RefreshCw,
   Save,
   X,
 } from "lucide-react";
@@ -24,12 +22,13 @@ import {
   SessionAPI,
   SessionAPIError,
   type TaskInfo,
+  useStateUpdates,
 } from "@/utils/session";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
-import { ScrollArea } from "../ui/scroll-area";
+// import { ScrollArea } from "../ui/scroll-area";
 import { Textarea } from "../ui/textarea";
 
 interface TaskManagerProps {
@@ -61,6 +60,9 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
     priority: "medium",
   });
 
+  // State update hook for handling state_update messages
+  const { stateUpdates, convertToTaskUpdates, error: stateUpdateError } = useStateUpdates(sessionId);
+
   // Load tasks
   const loadTasks = useCallback(async () => {
     if (!sessionId) return;
@@ -90,6 +92,33 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
   useEffect(() => {
     loadTasks();
   }, [sessionId, loadTasks]);
+
+  // Process state updates and replace agent-generated tasks with new ones
+  useEffect(() => {
+    if (stateUpdates.length > 0) {
+      const latestStateUpdate = stateUpdates[stateUpdates.length - 1];
+      const newTasksFromStateUpdate = convertToTaskUpdates(latestStateUpdate);
+      
+      // Replace agent-generated tasks with new ones from state update
+      setTasks(prevTasks => {
+        // Keep only user-created tasks (those without is_agent_generated flag)
+        const userCreatedTasks = prevTasks.filter(task => !task.metadata?.is_agent_generated);
+        
+        // Add new agent-generated tasks from state update
+        const updatedTasks = [...userCreatedTasks, ...newTasksFromStateUpdate];
+        
+        return updatedTasks;
+      });
+
+      // Notify parent component of task updates
+      if (onTaskUpdate) {
+        setTasks(currentTasks => {
+          onTaskUpdate(currentTasks);
+          return currentTasks;
+        });
+      }
+    }
+  }, [stateUpdates, convertToTaskUpdates, onTaskUpdate]);
 
   // Create new task
   const handleCreateTask = async () => {
@@ -139,7 +168,9 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
 
   // Start editing task
   const handleStartEdit = (task: TaskInfo) => {
-    setEditingTask(task.id);
+    // TODO: Implement task editing functionality
+    // eslint-disable-next-line no-console
+    console.log("Edit task:", task.id);
   };
 
   // Cancel editing
@@ -233,36 +264,15 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
             Session: {sessionId.slice(0, 8)}...
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadTasks}
-            disabled={isLoading}
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
-            />
-            Refresh
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setIsCreating(true)}
-            disabled={isLoading || isCreating}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            New Task
-          </Button>
-        </div>
       </div>
 
       {/* Error Display */}
-      {error && (
+      {(error || stateUpdateError) && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-red-800">
               <AlertCircle className="h-4 w-4" />
-              <span>{error}</span>
+              <span>{error || stateUpdateError?.message}</span>
             </div>
           </CardContent>
         </Card>
@@ -521,10 +531,10 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
         <CardHeader>
           <CardTitle>Tasks ({filteredTasks.length})</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-hidden">
           {isLoading ? (
             <div className="text-center py-8">
-              <RefreshCw className="h-8 w-8 mx-auto animate-spin text-gray-400" />
+              <div className="h-8 w-8 mx-auto animate-spin text-gray-400 border-4 border-gray-300 border-t-blue-600 rounded-full" />
               <p className="mt-2 text-gray-600">Loading tasks...</p>
             </div>
           ) : filteredTasks.length === 0 ? (
@@ -543,44 +553,48 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
               )}
             </div>
           ) : (
-            <ScrollArea className="h-96">
-              <div className="space-y-2">
+            <div className="h-96 w-full overflow-y-auto overflow-x-hidden border rounded-md bg-gray-50/50">
+              <div className="space-y-2 w-full p-2">
                 {filteredTasks.map((task) => (
                   <div
                     key={task.id}
-                    className="p-4 border rounded-lg hover:border-gray-300 transition-colors"
+                    className="p-4 border rounded-lg hover:border-gray-300 transition-colors w-full bg-white"
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-start justify-between w-full gap-4">
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
                           {getStatusIcon(task.status)}
-                          <h4 className="font-medium">{task.title}</h4>
-                          <Badge className={getStatusBadgeColor(task.status)}>
-                            {task.status}
-                          </Badge>
-                          <Badge
-                            className={getPriorityBadgeColor(task.priority)}
-                          >
-                            {task.priority}
-                          </Badge>
+                          <h4 className="font-medium truncate">{task.title}</h4>
+                          <div className="flex gap-1 flex-wrap">
+                            <Badge className={getStatusBadgeColor(task.status)}>
+                              {task.status}
+                            </Badge>
+                            <Badge
+                              className={getPriorityBadgeColor(task.priority)}
+                            >
+                              {task.priority}
+                            </Badge>
+                            {/* Show badge for agent-generated tasks */}
+                            {task.metadata?.is_agent_generated && (
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                Agent: {task.metadata.update_type || 'generated'}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
 
                         {task.description && (
-                          <p className="text-sm text-gray-600 mb-2">
+                          <p className="text-sm text-gray-600 mb-2 break-words">
                             {task.description}
                           </p>
                         )}
 
-                        <div className="flex items-center gap-4 text-xs text-gray-500">
-                          <span>ID: {task.id}</span>
-                          <span>
-                            Created:{" "}
-                            {new Date(task.created_at).toLocaleString()}
-                          </span>
+                        <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
+                          <span className="truncate">ID: {task.id}</span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 ml-4">
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <Button
                           variant="outline"
                           size="sm"
@@ -593,7 +607,7 @@ export const TaskManager: React.FC<TaskManagerProps> = ({
                   </div>
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           )}
         </CardContent>
       </Card>

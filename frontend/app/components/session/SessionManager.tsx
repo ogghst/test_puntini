@@ -10,12 +10,10 @@ import {
   AlertCircle,
   Clock,
   Eye,
-  Plus,
-  RefreshCw,
   Trash2,
   Users,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   SessionAPI,
   SessionAPIError,
@@ -23,6 +21,8 @@ import {
   type SessionInfo,
   type SessionStats,
 } from "@/utils/session";
+import { config } from "@/utils/config";
+import { useAuth } from "../auth/AuthContext";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -38,13 +38,14 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   selectedSessionId,
 }) => {
   const { currentSession, refreshSession } = useSession();
+  const { user } = useAuth();
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [stats, setStats] = useState<SessionStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Load sessions and stats
-  const loadData = async () => {
+  const loadData = useCallback(async (retryCount = 0) => {
     setIsLoading(true);
     setError(null);
 
@@ -61,16 +62,30 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
         err instanceof SessionAPIError
           ? err
           : new SessionAPIError("Failed to load data");
+      
       setError(apiError.message);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Load data on component mount
-  useEffect(() => {
-    loadData();
   }, []);
+
+  // Load data on component mount and set up polling
+  useEffect(() => {
+    // Add a small delay to ensure authentication is ready
+    const initialTimer = setTimeout(() => {
+      loadData();
+    }, 100);
+    
+    // Set up polling every 30 seconds
+    const pollingInterval = setInterval(() => {
+      loadData();
+    }, 30000);
+    
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(pollingInterval);
+    };
+  }, [loadData]);
 
   // Refresh current session
   const handleRefreshSession = async () => {
@@ -84,30 +99,12 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     }
   };
 
-  // Create new session
-  const handleCreateSession = async () => {
-    try {
-      const newSession = await SessionAPI.createSession({
-        user_id: "frontend_user",
-        metadata: { source: "session_manager" },
-      });
-
-      await loadData(); // Reload sessions
-
-      if (onSessionSelect) {
-        onSessionSelect(newSession);
-      }
-    } catch (err) {
-      const apiError =
-        err instanceof SessionAPIError
-          ? err
-          : new SessionAPIError("Failed to create session");
-      setError(apiError.message);
-    }
-  };
 
   // Destroy session
   const handleDestroySession = async (sessionId: string) => {
+    setIsLoading(true);
+    setError(null);
+    
     try {
       await SessionAPI.destroySession(sessionId);
       await loadData(); // Reload sessions
@@ -117,6 +114,8 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           ? err
           : new SessionAPIError("Failed to destroy session");
       setError(apiError.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -159,6 +158,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
 
   return (
     <div className="space-y-6">
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -166,23 +166,6 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           <p className="text-gray-600">
             Manage user sessions and monitor activity
           </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadData}
-            disabled={isLoading}
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
-            />
-            Refresh
-          </Button>
-          <Button size="sm" onClick={handleCreateSession} disabled={isLoading}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Session
-          </Button>
         </div>
       </div>
 
@@ -192,11 +175,41 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-red-800">
               <AlertCircle className="h-4 w-4" />
-              <span>{error}</span>
+              <span className="flex-1">{error}</span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadData(0)}
+                  disabled={isLoading}
+                >
+                  Retry
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setError(null)}
+                >
+                  Dismiss
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Loading State */}
+      {isLoading && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-blue-800">
+              <div className="h-4 w-4 animate-spin border-2 border-blue-300 border-t-blue-600 rounded-full" />
+              <span>Loading session data...</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
 
       {/* Statistics */}
       {stats && (
@@ -261,7 +274,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">
-                  Session {currentSession.session_id.slice(0, 8)}...
+                  Session {currentSession.session_id?.slice(0, 8) || 'unknown'}...
                 </p>
                 <p className="text-sm text-gray-600">
                   Created:{" "}
@@ -273,15 +286,15 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge className={getStatusBadgeColor(currentSession.status)}>
-                  {currentSession.status}
+                <Badge className={getStatusBadgeColor(currentSession.status || 'unknown')}>
+                  {currentSession.status || 'unknown'}
                 </Badge>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleRefreshSession}
                 >
-                  <RefreshCw className="h-4 w-4" />
+                  ↻
                 </Button>
               </div>
             </div>
@@ -297,8 +310,8 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
         <CardContent>
           <ScrollArea className="h-96">
             <div className="space-y-2">
-              {sessions.map((session) => (
-                <button
+              {sessions.length > 0 ? sessions.map((session) => (
+                <div
                   key={session.session_id}
                   className={`w-full text-left p-4 border rounded-lg cursor-pointer transition-colors ${
                     selectedSessionId === session.session_id
@@ -311,11 +324,11 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <p className="font-medium">
-                          {session.user_id} - {session.session_id.slice(0, 8)}
+                          {session.user_id} - {session.session_id?.slice(0, 8) || 'unknown'}
                           ...
                         </p>
-                        <Badge className={getStatusBadgeColor(session.status)}>
-                          {session.status}
+                        <Badge className={getStatusBadgeColor(session.status || 'unknown')}>
+                          {session.status || 'unknown'}
                         </Badge>
                         {session.is_active && (
                           <Badge className="bg-green-100 text-green-800">
@@ -378,12 +391,16 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                       </Button>
                     </div>
                   </div>
-                </button>
-              ))}
+                </div>
+              )) : null}
 
               {sessions.length === 0 && !isLoading && (
                 <div className="text-center py-8 text-gray-500">
-                  No sessions found
+                  <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p className="text-lg font-medium mb-2">No sessions found</p>
+                  <p className="text-sm">
+                    Sessions will appear here when they are created
+                  </p>
                 </div>
               )}
             </div>

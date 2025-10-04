@@ -114,44 +114,22 @@ def parse_goal(state: "State", config: Optional[RunnableConfig] = None, runtime:
         # Create prompt for goal parsing (progressive disclosure - attempt 1)
         logger.debug("Creating parsing prompt template")
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert at parsing natural language goals for a graph manipulation agent.
+            ("system", """Parse natural language goals for graph manipulation. Extract:
 
-Your task is to extract structured information from user goals that involve graph operations like:
-- Creating nodes (entities with labels and properties)
-- Creating edges (relationships between entities)
-- Updating properties
-- Querying the graph
-- Complex multi-step operations
+1. ENTITIES: Nodes/edges with labels and properties
+2. CONSTRAINTS: Requirements and rules  
+3. DOMAIN_HINTS: Context clues (project management, etc.)
+4. COMPLEXITY: simple/medium/complex
+5. INTENT: Primary purpose
+6. TODO_LIST: Step-by-step plan
 
-For each goal, extract:
-1. ENTITIES: Any nodes, edges, or properties mentioned
-2. CONSTRAINTS: Any requirements, rules, or limitations
-3. DOMAIN_HINTS: Context clues about the domain (project management, social network, etc.)
-4. COMPLEXITY: Assess how complex the goal is (simple/medium/complex)
-5. INTENT: The primary purpose or objective
-6. TODO_LIST: Create a step-by-step plan of actions to complete the goal
+TODO_LIST guidelines:
+- Use concise descriptions (e.g., "create Project entity", "add User-Project relationship")
+- Include step numbers, tool names (add_node, add_edge, update_props), complexity (low/medium/high)
+- Set status as "planned", dependencies as string step numbers ["1", "2"]
+- Focus on essential steps only - avoid excessive detail
 
-For the TODO_LIST, create specific, actionable items that:
-- Break down the goal into concrete steps
-- Use clear, descriptive language (e.g., "create the Project entity", "add relationship between User and Project")
-- Include step numbers for execution order
-- Specify which tool might be needed (add_node, add_edge, update_props, query_graph, etc.)
-- Estimate complexity (low, medium, high) for each step
-- Set initial status as "planned"
-- For dependencies: use step numbers as STRINGS (e.g., ["1", "2"]) not integers
-- Dependencies should reference other todo step numbers that must be completed first
-
-Guidelines:
-- Be precise in entity extraction - identify names, labels, and properties
-- Recognize relationship types and directions
-- Identify implicit constraints (uniqueness, required properties, etc.)
-- Extract domain context that might help with execution
-- Be conservative with complexity assessment
-- Focus on actionable, structured information
-- Create todos that are specific enough to be executed by tools
-- Ensure todos are in logical execution order
-
-Return a GoalSpec object with all extracted information including the todo_list."""),
+Be precise, conservative with complexity, and keep responses concise."""),
             ("human", "Parse this goal: {goal}")
         ])
         
@@ -161,7 +139,26 @@ Return a GoalSpec object with all extracted information including the todo_list.
         
         # Parse the goal
         logger.info("Invoking LLM for goal parsing", extra={"goal_preview": goal[:100] + "..." if len(goal) > 100 else goal})
-        parsed_goal_spec : GoalSpec = parsing_chain.invoke({"goal": goal})
+        
+        try:
+            parsed_goal_spec : GoalSpec = parsing_chain.invoke({"goal": goal})
+        except Exception as e:
+            # Check if this is a JSON parsing error (likely due to truncation)
+            if "JSONDecodeError" in str(e) or "Expecting value" in str(e) or "OUTPUT_PARSING_FAILURE" in str(e):
+                logger.error(
+                    "JSON parsing failed - likely due to response truncation",
+                    extra={
+                        "error": str(e),
+                        "error_type": "json_parsing_error",
+                        "current_attempt": current_attempt,
+                        "goal_length": len(goal),
+                        "llm_max_tokens": getattr(llm, 'max_tokens', 'unknown')
+                    }
+                )
+                raise ValidationError(f"Goal parsing failed: LLM response was truncated or malformed. This usually indicates the response exceeded token limits. Error: {str(e)}")
+            else:
+                # Re-raise other exceptions to be handled by outer try-catch
+                raise
         
         logger.info(
             "Successfully parsed goal",

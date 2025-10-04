@@ -20,7 +20,11 @@ COPY . .
 COPY config.docker.json config.json
 
 # Expose the port the app runs on
+<<<<<<< HEAD
 EXPOSE 8026
+=======
+EXPOSE 8025
+>>>>>>> 4204b32f4cfdabb5d42e18cd506c75762a75a455
 
 # Define the command to run the application
 CMD ["python", "run_server.py"]
