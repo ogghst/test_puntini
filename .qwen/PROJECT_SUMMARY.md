@@ -4,6 +4,7 @@
 Set up and test both backend and frontend Docker build images for the Puntini Agent application with comprehensive testing and documentation.
 
 ## Key Knowledge
+- Python virtual env in venv folder
 - Backend technology stack: Python 3.11, FastAPI, LangGraph, LangChain, Neo4j, and Langfuse
 - Frontend technology stack: React Router, Vite, and Node.js
 - Backend Docker image based on python:3.11-slim, runs on port 8025

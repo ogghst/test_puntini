@@ -120,6 +120,22 @@ class CallToolReturn(NodeReturnBase):
         return base_update
 
 
+class ExecuteToolReturn(NodeReturnBase):
+    """Return type for execute_tool node function (merged route_tool + call_tool)."""
+    
+    execute_tool_response: Optional[Any] = Field(default=None, description="Execute tool response object")
+    tool_signature: Optional[Dict[str, Any]] = Field(default=None, description="Validated tool signature")
+    
+    def to_state_update(self) -> Dict[str, Any]:
+        """Convert to state update including execute_tool specific fields."""
+        base_update = super().to_state_update()
+        base_update.update({
+            "execute_tool_response": self.execute_tool_response,
+            "tool_signature": self.tool_signature
+        })
+        return base_update
+
+
 class DiagnoseReturn(NodeReturnBase):
     """Return type for diagnose node function."""
     
@@ -199,6 +215,7 @@ NodeReturn = Union[
     PlanStepReturn,
     RouteToolReturn,
     CallToolReturn,
+    ExecuteToolReturn,
     DiagnoseReturn,
     AnswerReturn,
     EvaluateCommandReturn,

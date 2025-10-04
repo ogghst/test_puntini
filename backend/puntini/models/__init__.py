@@ -41,7 +41,7 @@ from .goal_schemas import (
     ConstraintSpec,
     DomainHint,
     GoalComplexity,
-    EntityType,
+    GraphElementType,
 )
 
 __all__ = [
@@ -83,5 +83,5 @@ __all__ = [
     "ConstraintSpec",
     "DomainHint",
     "GoalComplexity",
-    "EntityType",
+    "GraphElementType",
 ]

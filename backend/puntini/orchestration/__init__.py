@@ -8,7 +8,9 @@ functionality. It handles the overall workflow and state transitions.
 from .graph import (
     create_agent_graph,
     create_agent_with_checkpointer,
-    parse_goal,
+    parse_intent,
+    resolve_entities,
+    disambiguate,
     plan_step,
     route_tool,
     call_tool,
@@ -16,7 +18,9 @@ from .graph import (
     diagnose,
     escalate,
     answer,
-    route_after_parse_goal,
+    route_after_parse_intent,
+    route_after_resolve_entities,
+    route_after_disambiguate,
     route_after_evaluate,
     route_after_diagnose,
 )
@@ -45,7 +49,9 @@ __all__ = [
     "create_agent_with_checkpointer",
     
     # Node functions
-    "parse_goal",
+    "parse_intent",
+    "resolve_entities",
+    "disambiguate",
     "plan_step",
     "route_tool",
     "call_tool",
@@ -55,7 +61,9 @@ __all__ = [
     "answer",
     
     # Routing functions
-    "route_after_parse_goal",
+    "route_after_parse_intent",
+    "route_after_resolve_entities",
+    "route_after_disambiguate",
     "route_after_evaluate", 
     "route_after_diagnose",
     

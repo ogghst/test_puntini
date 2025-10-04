@@ -144,6 +144,20 @@ class CallToolResponse(BaseResponse):
     result: CallToolResult = Field(description="Tool execution result")
 
 
+class ExecuteToolResult(ExecutionResult):
+    """Result from execute_tool node execution (merged route_tool + call_tool)."""
+    tool_name: Optional[str] = Field(default=None, description="Name of executed tool")
+    result: Optional[Dict[str, Any]] = Field(default=None, description="Tool execution result")
+    result_type: Optional[str] = Field(default=None, description="Type of result returned")
+    routing_decision: Optional[Dict[str, Any]] = Field(default=None, description="Routing decision details")
+
+
+class ExecuteToolResponse(BaseResponse):
+    """Complete response from execute_tool node (merged route_tool + call_tool)."""
+    result: ExecuteToolResult = Field(description="Tool execution result")
+    tool_signature: Optional[Dict[str, Any]] = Field(default=None, description="Validated tool signature")
+
+
 class EvaluateResult(EvaluationResult):
     """Result from evaluate node execution."""
     pass

@@ -16,13 +16,16 @@ class GoalComplexity(str, Enum):
     COMPLEX = "complex"
 
 
-class EntityType(str, Enum):
-    """Enumeration of entity types that can be extracted from goals."""
-    NODE = "node"
-    EDGE = "edge"
-    PROPERTY = "property"
-    QUERY = "query"
-    UNKNOWN = "unknown"
+class GraphElementType(str, Enum):
+    """Semantic types for graph elements.
+    
+    Replaces the simplistic EntityType enum with proper semantic types
+    that serve a useful purpose for graph operations.
+    """
+    NODE_REFERENCE = "node_ref"      # Reference to existing/new node
+    EDGE_REFERENCE = "edge_ref"      # Reference to relationship  
+    LITERAL_VALUE = "literal"        # Actual value, not entity
+    SCHEMA_REFERENCE = "schema_ref"  # Reference to node label/edge type
 
 
 class EntitySpec(BaseModel):
@@ -32,7 +35,7 @@ class EntitySpec(BaseModel):
     goal involves manipulating or querying.
     """
     name: str = Field(description="The name or identifier of the entity")
-    type: EntityType = Field(description="The type of entity (node, edge, property, etc.)")
+    type: GraphElementType = Field(description="The type of graph element (node_ref, edge_ref, literal, schema_ref)")
     label: Optional[str] = Field(default=None, description="The label or category of the entity")
     properties: Dict[str, Any] = Field(default_factory=dict, description="Properties associated with the entity")
     confidence: float = Field(ge=0.0, le=1.0, default=1.0, description="Confidence score for entity extraction")
@@ -149,7 +152,7 @@ class GoalSpec(BaseModel):
                 return entity
         return None
 
-    def get_entities_by_type(self, entity_type: EntityType) -> List[EntitySpec]:
+    def get_entities_by_type(self, entity_type: GraphElementType) -> List[EntitySpec]:
         """Get all entities of a specific type.
         
         Args:
@@ -191,7 +194,7 @@ class GoalSpec(BaseModel):
             True if the goal involves graph operations, False otherwise.
         """
         return any(
-            entity.type in [EntityType.NODE, EntityType.EDGE]
+            entity.type in [GraphElementType.NODE_REFERENCE, GraphElementType.EDGE_REFERENCE]
             for entity in self.entities
         )
 

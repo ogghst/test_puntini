@@ -19,10 +19,11 @@ from .checkpointer import create_checkpointer, get_checkpoint_config
 from ..nodes.message import (
     ParseGoalResult, EvaluateResult, DiagnoseResult, ErrorContext, EscalateContext,
     AnswerResult, ParseGoalResponse, PlanStepResponse, RouteToolResponse,
-    CallToolResponse, EvaluateResponse, DiagnoseResponse, EscalateResponse, AnswerResponse
+    CallToolResponse, EvaluateResponse, DiagnoseResponse, EscalateResponse, AnswerResponse,
+    ExecuteToolResponse
 )
 from ..nodes.return_types import (
-    ParseGoalReturn, PlanStepReturn, RouteToolReturn, CallToolReturn,
+    ParseGoalReturn, PlanStepReturn, RouteToolReturn, CallToolReturn, ExecuteToolReturn,
     DiagnoseReturn, AnswerReturn, EvaluateReturn, EvaluateCommandReturn, EscalateCommandReturn
 )
 
@@ -32,11 +33,11 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def route_after_parse_goal(state: State) -> str:
-    """Route after parsing goal based on complexity and parsing results.
+def route_after_parse_intent(state: State) -> str:
+    """Route after parsing intent based on intent characteristics.
     
     Args:
-        state: Current agent state with parsed goal information.
+        state: Current agent state with parsed intent information.
         
     Returns:
         The next node to execute.
@@ -48,8 +49,8 @@ def route_after_parse_goal(state: State) -> str:
         # Convert Pydantic model to dictionary
         state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
-    # Get the parse goal response from state
-    parse_response = state_dict.get("parse_goal_response")
+    # Get the parse intent response from state
+    parse_response = state_dict.get("parse_intent_response")
     
     # If no response or parsing failed, route to diagnose
     if not parse_response:
@@ -66,6 +67,78 @@ def route_after_parse_goal(state: State) -> str:
         if parse_response.result.status == "error":
             return "diagnose"
         return parse_response.current_step
+
+
+def route_after_resolve_entities(state: State) -> str:
+    """Route after resolving entities based on resolution results.
+    
+    Args:
+        state: Current agent state with resolved entities.
+        
+    Returns:
+        The next node to execute.
+    """
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Get the resolve entities response from state
+    resolve_response = state_dict.get("resolve_entities_response")
+    
+    # If no response or resolution failed, route to diagnose
+    if not resolve_response:
+        return "diagnose"
+    
+    # Check if resolution failed (handle both dict and object responses)
+    if isinstance(resolve_response, dict):
+        result = resolve_response.get("result", {})
+        if result.get("status") == "error":
+            return "diagnose"
+        return resolve_response.get("current_step", "diagnose")
+    else:
+        # Handle object response
+        if resolve_response.result.status == "error":
+            return "diagnose"
+        return resolve_response.current_step
+
+
+def route_after_disambiguate(state: State) -> str:
+    """Route after disambiguation based on disambiguation results.
+    
+    Args:
+        state: Current agent state with disambiguation results.
+        
+    Returns:
+        The next node to execute.
+    """
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Get the disambiguate response from state
+    disambiguate_response = state_dict.get("disambiguate_response")
+    
+    # If no response or disambiguation failed, route to diagnose
+    if not disambiguate_response:
+        return "diagnose"
+    
+    # Check if disambiguation failed (handle both dict and object responses)
+    if isinstance(disambiguate_response, dict):
+        result = disambiguate_response.get("result", {})
+        if result.get("status") == "error":
+            return "diagnose"
+        return disambiguate_response.get("current_step", "diagnose")
+    else:
+        # Handle object response
+        if disambiguate_response.result.status == "error":
+            return "diagnose"
+        return disambiguate_response.current_step
 
 
 def route_after_evaluate(state: State) -> str:
@@ -182,10 +255,10 @@ def route_after_diagnose(state: State) -> str:
         return "escalate"
 
 
-def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
-    """Parse the goal and extract structured information.
+def parse_intent(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
+    """Parse minimal intent without graph context (Phase 1 of two-phase parsing).
     
-    This function delegates to the actual parse_goal implementation
+    This function delegates to the actual parse_intent implementation
     in the nodes module to maintain separation of concerns.
     
     Args:
@@ -194,13 +267,95 @@ def parse_goal(state: State, config: Optional[RunnableConfig] = None, runtime: O
         runtime: Optional Runtime context for additional runtime information.
         
     Returns:
-        Dictionary with parsed goal information and state updates.
+        Dictionary with parsed intent information and state updates.
     """
-    logger.debug("Executing parse_goal node")
-    from ..nodes.parse_goal import parse_goal as parse_goal_impl
+    logger.debug("Executing parse_intent node")
+    from ..nodes.parse_intent import parse_intent as parse_intent_impl
     
     # Call the implementation and get the response
-    response : ParseGoalResponse = parse_goal_impl(state, config, runtime)
+    response: ParseGoalResponse = parse_intent_impl(state, config, runtime)
+    
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Create the proper return type and convert to state update
+    return_obj = ParseGoalReturn(
+        current_step=response.current_step,
+        current_attempt=response.current_attempt,
+        progress=response.progress,
+        artifacts=response.artifacts,
+        failures=response.failures,
+        result=response.result.model_dump() if response.result else None,
+        parse_goal_response=response
+    )
+    
+    return return_obj.to_state_update()
+
+
+def resolve_entities(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
+    """Resolve entities with graph context (Phase 2 of two-phase parsing).
+    
+    This function delegates to the actual resolve_entities implementation
+    in the nodes module to maintain separation of concerns.
+    
+    Args:
+        state: Current agent state.
+        config: Optional RunnableConfig for additional configuration.
+        runtime: Optional Runtime context for additional runtime information.
+        
+    Returns:
+        Dictionary with resolved entities and state updates.
+    """
+    logger.debug("Executing resolve_entities node")
+    from ..nodes.resolve_entities import resolve_entities as resolve_entities_impl
+    
+    # Call the implementation and get the response
+    response: ParseGoalResponse = resolve_entities_impl(state, config, runtime)
+    
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Create the proper return type and convert to state update
+    return_obj = ParseGoalReturn(
+        current_step=response.current_step,
+        current_attempt=response.current_attempt,
+        progress=response.progress,
+        artifacts=response.artifacts,
+        failures=response.failures,
+        result=response.result.model_dump() if response.result else None,
+        parse_goal_response=response
+    )
+    
+    return return_obj.to_state_update()
+
+
+def disambiguate(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
+    """Handle ambiguous entity references with user interaction.
+    
+    This function delegates to the actual disambiguate implementation
+    in the nodes module to maintain separation of concerns.
+    
+    Args:
+        state: Current agent state.
+        config: Optional RunnableConfig for additional configuration.
+        runtime: Optional Runtime context for additional runtime information.
+        
+    Returns:
+        Dictionary with disambiguation results and state updates.
+    """
+    logger.debug("Executing disambiguate node")
+    from ..nodes.disambiguate import disambiguate as disambiguate_impl
+    
+    # Call the implementation and get the response
+    response: ParseGoalResponse = disambiguate_impl(state, config, runtime)
     
     # Convert state to dict if needed
     if isinstance(state, dict):
@@ -296,6 +451,53 @@ def route_tool(state: State, config: Optional[RunnableConfig] = None, runtime: O
         failures=response.failures,
         result=response.result.model_dump() if response.result else None,
         route_tool_response=response,
+        tool_signature=response.tool_signature
+    )
+    
+    return return_obj.to_state_update()
+
+
+def execute_tool(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
+    """Execute tool with validation and execution in one atomic operation.
+    
+    This function combines the functionality of route_tool and call_tool
+    nodes, eliminating unnecessary indirection as specified in Phase 4
+    of the progressive refactoring plan.
+    
+    Args:
+        state: Current agent state.
+        config: Optional RunnableConfig for additional configuration.
+        runtime: Optional Runtime context for additional runtime information.
+        
+    Returns:
+        Dictionary with tool execution result and state updates.
+        
+    Notes:
+        This addresses the critical problem of unnecessary indirection
+        where route_tool + call_tool were doing one job. Now it's
+        one atomic operation with proper error handling.
+    """
+    logger.debug("Executing execute_tool node (merged route + call)")
+    from ..nodes.execute_tool import execute_tool as execute_tool_impl
+    
+    # Call the implementation and get the response
+    response : ExecuteToolResponse = execute_tool_impl(state, config, runtime)
+    
+    # Convert state to dict if needed
+    if isinstance(state, dict):
+        state_dict = state
+    else:
+        # Convert Pydantic model to dictionary
+        state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
+    
+    # Create the proper return type and convert to state update
+    return_obj = ExecuteToolReturn(
+        current_step=response.current_step,
+        progress=response.progress,
+        artifacts=response.artifacts,
+        failures=response.failures,
+        result=response.result.model_dump() if response.result else None,
+        execute_tool_response=response,
         tool_signature=response.tool_signature
     )
     
@@ -549,33 +751,54 @@ def create_agent_graph(
     workflow = StateGraph(State)
     
     # Add nodes
-    workflow.add_node("parse_goal", parse_goal)
+    workflow.add_node("parse_intent", parse_intent)
+    workflow.add_node("resolve_entities", resolve_entities)
+    workflow.add_node("disambiguate", disambiguate)
     workflow.add_node("plan_step", plan_step)
-    workflow.add_node("route_tool", route_tool)
-    workflow.add_node("call_tool", call_tool)
+    workflow.add_node("execute_tool", execute_tool)  # Merged tool execution node (Phase 4)
     workflow.add_node("evaluate", evaluate)
     workflow.add_node("diagnose", diagnose)
     workflow.add_node("escalate", escalate)
     workflow.add_node("answer", answer)
     
     # Add edges
-    workflow.add_edge(START, "parse_goal")
+    workflow.add_edge(START, "parse_intent")
     
-    # Conditional routing after parse_goal
+    # Conditional routing after parse_intent (Phase 1)
     workflow.add_conditional_edges(
-        "parse_goal",
-        route_after_parse_goal,
+        "parse_intent",
+        route_after_parse_intent,
         {
+            "resolve_entities": "resolve_entities",
             "plan_step": "plan_step",
-            "route_tool": "route_tool", 
             "diagnose": "diagnose"
         }
     )
     
-    # Direct edges for planning and routing
-    workflow.add_edge("plan_step", "route_tool")
-    workflow.add_edge("route_tool", "call_tool")
-    workflow.add_edge("call_tool", "evaluate")
+    # Conditional routing after resolve_entities (Phase 2)
+    workflow.add_conditional_edges(
+        "resolve_entities",
+        route_after_resolve_entities,
+        {
+            "disambiguate": "disambiguate",
+            "plan_step": "plan_step",
+            "diagnose": "diagnose"
+        }
+    )
+    
+    # Conditional routing after disambiguate
+    workflow.add_conditional_edges(
+        "disambiguate",
+        route_after_disambiguate,
+        {
+            "plan_step": "plan_step",
+            "diagnose": "diagnose"
+        }
+    )
+    
+    # Direct edges for planning and execution (using execute_tool instead of route_tool + call_tool)
+    workflow.add_edge("plan_step", "execute_tool")
+    workflow.add_edge("execute_tool", "evaluate")
     
     # Note: evaluate and escalate nodes use Command for routing,
     # so they don't need conditional edges - they handle routing internally

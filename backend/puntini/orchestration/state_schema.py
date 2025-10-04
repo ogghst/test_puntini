@@ -9,11 +9,12 @@ from typing_extensions import TypedDict, Annotated
 from operator import add
 
 from ..models.goal_schemas import TodoItem, GoalSpec
+from ..models.intent_schemas import IntentSpec, ResolvedGoalSpec
 from ..nodes.message import (
     Artifact, Failure, ErrorContext, EscalateContext,
     ParseGoalResponse, PlanStepResponse, RouteToolResponse, 
     CallToolResponse, EvaluateResponse, DiagnoseResponse, 
-    EscalateResponse, AnswerResponse
+    EscalateResponse, AnswerResponse, ExecuteToolResponse
 )
 from ..nodes.plan_step import StepPlan
 
@@ -28,7 +29,9 @@ class State(TypedDict):
     
     # Core goal and planning
     goal: str  # The user's goal or request
-    goal_spec: Optional[GoalSpec]  # Parsed goal specification
+    goal_spec: Optional[GoalSpec]  # Parsed goal specification (legacy)
+    intent_spec: Optional[IntentSpec]  # Parsed intent specification (Phase 1)
+    resolved_goal_spec: Optional[ResolvedGoalSpec]  # Resolved goal specification (Phase 2)
     plan: Annotated[List[str], add]  # Execution plan steps (append-only)
     progress: Annotated[List[str], add]  # Progress messages (append-only)
     todo_list: List[TodoItem]  # List of todos for goal execution
@@ -58,10 +61,14 @@ class State(TypedDict):
     escalation_context: Optional[EscalateContext]  # Escalation context
     
     # Node responses for type safety
-    parse_goal_response: Optional[ParseGoalResponse]  # Parse goal node response
+    parse_goal_response: Optional[ParseGoalResponse]  # Parse goal node response (legacy)
+    parse_intent_response: Optional[ParseGoalResponse]  # Parse intent node response (Phase 1)
+    resolve_entities_response: Optional[ParseGoalResponse]  # Resolve entities node response (Phase 2)
+    disambiguate_response: Optional[ParseGoalResponse]  # Disambiguate node response
     plan_step_response: Optional[PlanStepResponse]  # Plan step node response
-    route_tool_response: Optional[RouteToolResponse]  # Route tool node response
-    call_tool_response: Optional[CallToolResponse]  # Call tool node response
+    route_tool_response: Optional[RouteToolResponse]  # Route tool node response (legacy)
+    call_tool_response: Optional[CallToolResponse]  # Call tool node response (legacy)
+    execute_tool_response: Optional[ExecuteToolResponse]  # Execute tool node response (Phase 4)
     evaluate_response: Optional[EvaluateResponse]  # Evaluate node response
     diagnose_response: Optional[DiagnoseResponse]  # Diagnose node response
     escalate_response: Optional[EscalateResponse]  # Escalate node response
