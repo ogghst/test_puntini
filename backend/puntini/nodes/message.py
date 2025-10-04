@@ -1,10 +1,14 @@
-"""Message classes for node outputs.
+"""Message classes for node outputs with streamlined response architecture.
 
 This module defines Pydantic models for structured outputs from nodes,
-providing type safety and validation for all node responses.
+providing type safety and validation for all node responses. This implements
+the streamlined response architecture from Phase 6 of the refactoring plan.
+
+The streamlined architecture uses a generic response wrapper with node-specific
+result types to eliminate redundant response patterns as specified in the plan.
 """
 
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING, Generic, TypeVar
 from pydantic import BaseModel, Field
 from datetime import datetime
 

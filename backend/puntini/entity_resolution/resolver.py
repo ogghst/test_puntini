@@ -28,6 +28,7 @@ from .models import (
 )
 from .context import GraphContext
 from .similarity import EntitySimilarityScorer, SimilarityConfig
+from .rules import EntityResolutionRules, DefaultEntityResolutionRules, EntityDeduplicationEngine
 from puntini.interfaces.graph_store import GraphStore
 
 
@@ -96,16 +97,20 @@ class GraphAwareEntityResolver:
     def __init__(
         self, 
         graph_store: GraphStore,
-        similarity_config: Optional[SimilarityConfig] = None
+        similarity_config: Optional[SimilarityConfig] = None,
+        resolution_rules: Optional[EntityResolutionRules] = None
     ):
         """Initialize the entity resolver.
         
         Args:
             graph_store: Graph store for querying entities.
             similarity_config: Optional configuration for similarity scoring.
+            resolution_rules: Optional rules for entity resolution (uses default if not provided).
         """
         self.graph_store = graph_store
         self.similarity_scorer = EntitySimilarityScorer(similarity_config)
+        self.resolution_rules = resolution_rules or DefaultEntityResolutionRules(self.similarity_scorer)
+        self.deduplication_engine = EntityDeduplicationEngine(self.resolution_rules)
     
     def resolve_mention(
         self, 
@@ -124,12 +129,37 @@ class GraphAwareEntityResolver:
         # Step 1: Find candidates in the graph
         candidates = self.find_candidates(mention, context)
         
-        # Step 2: Score candidates by similarity
+        # Step 2: Apply resolution rules to filter candidates
+        mention_obj = EntityMention(surface_form=mention, element_type="node_ref")
+        filtered_candidates = self.resolution_rules.match_candidates(mention_obj, candidates)
+        
+        # Step 3: Score candidates by similarity
         scored_candidates = self.similarity_scorer.score_mention_candidates(
-            mention, candidates, context
+            mention, filtered_candidates, context
         )
         
-        # Step 3: Determine resolution strategy
+        # Step 4: Check for duplicates among the candidates
+        if len(scored_candidates) > 1:
+            duplicate_groups = self.deduplication_engine.find_duplicates(scored_candidates, threshold=0.8)
+            if duplicate_groups:
+                # Merge duplicates before proceeding
+                merged_candidates = []
+                processed_ids = set()
+                
+                for group in duplicate_groups:
+                    # Merge entities in the group
+                    merged_entity = self.deduplication_engine.merge_entities(group)
+                    merged_candidates.append(merged_entity)
+                    processed_ids.update(c.id for c in group)
+                
+                # Add any unprocessed candidates
+                for candidate in scored_candidates:
+                    if candidate.id not in processed_ids:
+                        merged_candidates.append(candidate)
+                
+                scored_candidates = merged_candidates
+
+        # Step 5: Determine resolution strategy
         if not scored_candidates:
             # No candidates found - create new entity
             return EntityResolution(

@@ -23,9 +23,27 @@ from .models import (
     AmbiguityResolution,
     ResolutionStatus
 )
-from .resolver import EntityResolver
-from .similarity import EntitySimilarityScorer
-from .context import GraphContext
+from .resolver import (
+    EntityResolver,
+    GraphAwareEntityResolver,
+    EntityResolutionService
+)
+from .similarity import (
+    EntitySimilarityScorer,
+    SimilarityConfig
+)
+from .context import (
+    GraphContext,
+    GraphSnapshot
+)
+from .rules import (
+    EntityResolutionRules,
+    DefaultEntityResolutionRules,
+    MatchRule,
+    MergeStrategy,
+    ConflictResolution,
+    EntityDeduplicationEngine
+)
 
 __all__ = [
     # Core models
@@ -40,6 +58,18 @@ __all__ = [
     
     # Core components
     "EntityResolver",
+    "GraphAwareEntityResolver",
+    "EntityResolutionService",
     "EntitySimilarityScorer",
+    "SimilarityConfig",
     "GraphContext",
+    "GraphSnapshot",
+    
+    # Resolution rules and deduplication
+    "EntityResolutionRules",
+    "DefaultEntityResolutionRules",
+    "MatchRule",
+    "MergeStrategy",
+    "ConflictResolution",
+    "EntityDeduplicationEngine"
 ]

@@ -58,11 +58,11 @@ def resolve_entities(state: "State", config: Optional[RunnableConfig] = None, ru
     if isinstance(state, dict):
         goal = state.get("goal")
         current_attempt = state.get("current_attempt", 1)
-        parse_goal_response = state.get("parse_goal_response")
+        parse_goal_response = state.get("parse_intent_response")
     else:
         goal = getattr(state, "goal", None)
         current_attempt = getattr(state, "current_attempt", 1)
-        parse_goal_response = getattr(state, "parse_goal_response", None)
+        parse_goal_response = getattr(state, "parse_intent_response", None)
     
     # Validate required fields
     if not isinstance(goal, str):

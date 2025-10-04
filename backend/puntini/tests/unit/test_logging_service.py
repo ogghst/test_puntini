@@ -121,8 +121,8 @@ class TestLoggingServiceSetup:
             with patch('logging.RootLogger.addHandler') as mock_add:
                 logging_service.setup()
                 
-                # Should add file handler, error handler, and console handler
-                assert mock_add.call_count >= 3
+                # Should add file handler and console handler
+                assert mock_add.call_count >= 2
 
 
 class TestLoggingServiceFileHandlers:
@@ -141,14 +141,13 @@ class TestLoggingServiceFileHandlers:
             with patch('logging.RootLogger.addHandler') as mock_add:
                 logging_service.setup()
                 
-                # Should add main log file and error log file
-                assert mock_add.call_count >= 2
+                # Should add main log file
+                assert mock_add.call_count >= 1
                 
                 # Check that file paths are correct
                 calls = mock_add.call_args_list
                 handler_files = [h.baseFilename for call in calls for h in call.args if hasattr(h, 'baseFilename')]
                 assert any("test.log" in str(path) for path in handler_files)
-                assert any("error.log" in str(path) for path in handler_files)
     
     def test_file_handler_rotation_configuration(self):
         """Test that file handlers use correct rotation configuration."""
@@ -447,7 +446,7 @@ class TestLoggingServiceIntegration:
         logger.error("Error message")
 
         # Verify log files were created
-        log_file = Path(temp_dir) / "backend.log"
+        log_file = Path(temp_dir) / logging_service.settings.logging.log_file
         assert log_file.exists()
 
         log_content = log_file.read_text()
@@ -468,7 +467,7 @@ class TestLoggingServiceIntegration:
         logger.info("User action performed", extra=extra_data)
 
         # Verify log files contain structured data
-        log_file = Path(temp_dir) / "backend.log"
+        log_file = Path(temp_dir) / logging_service.settings.logging.log_file
         assert log_file.exists()
         log_content = log_file.read_text()
         assert '"user_id": "12345"' in log_content

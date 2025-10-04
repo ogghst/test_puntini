@@ -530,15 +530,51 @@ state.execute_tool_response = {...}  # Single, meaningful field
 **Purpose**: Provide relevant graph subgraphs to nodes that need them
 **Features**: Graph snapshot creation, entity similarity queries, context-aware entity matching
 
+### Phase 5: Entity Deduplication & Resolution (Medium Priority)
+**Status**: ✅ COMPLETED
+
+#### 5.1 Entity Resolution Rules
+**Location**: `puntini/entity_resolution/rules.py`
+**Duration**: 2 weeks
+**Dependencies**: 1.1
+**Status**: ✅ COMPLETED
+
+**Components**:
+- Match by key, email, unique properties
+- Merge strategies for when entities are the same
+- Conflict resolution for property conflicts
+
+#### 5.2 Graph Context Integration
+**Location**: `puntini/context/graph_context.py`
+**Duration**: 1 week
+**Dependencies**: 1.1
+**Status**: ✅ COMPLETED
+
+**Purpose**: Provide relevant graph subgraphs to nodes that need them
+**Features**: Graph snapshot creation, entity similarity queries, context-aware entity matching
+
 ### Phase 6: Response Object Streamlining (Low Priority)
+**Status**: ✅ COMPLETED
 
 #### 6.1 Eliminate Redundant Response Objects
 **Location**: `puntini/nodes/message.py`
 **Duration**: 1 week
 **Dependencies**: 4.1
+**Status**: ✅ COMPLETED
 
 **Change**: Replace copy-paste response architecture with streamlined pattern
 **Approach**: Use generic response wrapper with node-specific result types
+
+**Implementation Details**:
+- ✅ Created `GenericNodeResponse` generic wrapper that can hold any node-specific result type
+- ✅ Implemented clean, focused result types without redundant wrapper fields
+- ✅ Added comprehensive type safety with Pydantic models and generics
+- ✅ Provided backward compatibility with existing interfaces
+- ✅ Created streamlined message architecture in `puntini/nodes/streamlined_message.py`
+- ✅ Created streamlined return types in `puntini/nodes/streamlined_return_types.py`
+- ✅ Updated existing message module to implement streamlined architecture
+- ✅ Updated existing return types module to implement streamlined architecture
+- ✅ All tests passing for new streamlined components
 
 ## Implementation Timeline
 

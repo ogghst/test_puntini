@@ -98,7 +98,7 @@ def parse_intent(state: "State", config: Optional[RunnableConfig] = None, runtim
                 raise ValidationError("Runtime context not available for LLM access")
         
         # Get the LLM from the context
-        if not hasattr(runtime, 'context') or 'llm' not in runtime.context:
+        if not hasattr(runtime, 'context') or runtime.context is None or 'llm' not in runtime.context:
             logger.error("LLM not found in runtime context")
             raise ValidationError("LLM not configured in graph context")
         

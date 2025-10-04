@@ -1,22 +1,34 @@
-"""Return type models for graph node functions.
+"""Return type models for graph node functions with streamlined architecture.
 
 This module defines Pydantic models for the return types of graph node functions,
-providing type safety and validation for all node function returns.
+implementing the streamlined response architecture from Phase 6 of the refactoring plan.
+This eliminates redundant response patterns by using generic return types with 
+node-specific result types as specified in the plan.
 """
 
-from typing import Any, Dict, List, Optional, Union, Literal
+from typing import Any, Dict, List, Optional, Union, Literal, Generic, TypeVar
 from pydantic import BaseModel, Field
 from datetime import datetime
 
-from .message import (
+# Import streamlined architecture components
+from .streamlined_message import (
     Artifact, Failure, ErrorContext, EscalateContext,
+    ParseGoalResult, PlanStepResult, ExecuteToolResult, EvaluateResult,
+    DiagnoseResult, AnswerResult, EscalateResult
+)
+
+# Legacy imports for backward compatibility
+from .message import (
     BaseResult, BaseResponse, ExecutionResult, PlanningResult,
-    EvaluationResult, DiagnosisResult, AnswerResultBase
+    EvaluationResult as LegacyEvaluationResult, DiagnosisResult, AnswerResultBase
 )
 
 
-class NodeReturnBase(BaseModel):
-    """Base class for all node return types with common fields."""
+# Generic return type using TypeVar for node-specific results
+T = TypeVar('T')
+
+class GenericNodeReturn(BaseModel, Generic[T]):
+    """Generic return type that can hold any node-specific result type."""
     
     model_config = {
         "arbitrary_types_allowed": True,
@@ -31,158 +43,129 @@ class NodeReturnBase(BaseModel):
     failures: List[Failure] = Field(default_factory=list, description="Failures that occurred")
     result: Optional[Dict[str, Any]] = Field(default=None, description="Execution result")
     
+    # Node-specific result object
+    node_result: Optional[T] = Field(default=None, description="Node-specific result object")
+    
+    # Additional fields that may be needed
+    current_attempt: Optional[int] = Field(default=None, description="Current attempt number when relevant")
+    tool_signature: Optional[Dict[str, Any]] = Field(default=None, description="Tool signature when relevant")
+    todo_list: List = Field(default_factory=list, description="Todo list when relevant")
+    goal_spec: Optional[Dict[str, Any]] = Field(default=None, description="Goal specification when relevant")
+    escalation_context: Optional[EscalateContext] = Field(default=None, description="Escalation context when relevant")
+    
     def to_state_update(self) -> Dict[str, Any]:
-        """Convert the return type to a state update dictionary for LangGraph.
-        
-        Returns:
-            Dictionary representing state updates that can be applied by LangGraph.
-        """
+        """Convert to state update including node-specific result."""
         return {
             "current_step": self.current_step,
             "progress": self.progress,
             "artifacts": self.artifacts,
             "failures": self.failures,
-            "result": self.result
+            "result": self.result,
+            "node_result": self.node_result,
+            "current_attempt": self.current_attempt,
+            "tool_signature": self.tool_signature,
+            "todo_list": self.todo_list,
+            "goal_spec": self.goal_spec,
+            "escalation_context": self.escalation_context
         }
 
 
-class ParseGoalReturn(NodeReturnBase):
-    """Return type for parse_goal node function."""
+# Streamlined return types using generic pattern with node-specific result types
+class RouteToolReturn(GenericNodeReturn[ParseGoalResult]):
+    """Return type for route_tool node function using streamlined architecture.
     
-    current_attempt: int = Field(description="Current attempt number")
-    parse_goal_response: Optional[Any] = Field(default=None, description="Parse goal response object")
-    
-    def to_state_update(self) -> Dict[str, Any]:
-        """Convert to state update including parse_goal specific fields."""
-        base_update = super().to_state_update()
-        base_update.update({
-            "current_attempt": self.current_attempt,
-            "parse_goal_response": self.parse_goal_response
-        })
-        
-        # Include todo_list and goal_spec from the response if available
-        if self.parse_goal_response:
-            if hasattr(self.parse_goal_response, 'todo_list'):
-                base_update["todo_list"] = self.parse_goal_response.todo_list
-            if hasattr(self.parse_goal_response, 'goal_spec'):
-                base_update["goal_spec"] = self.parse_goal_response.goal_spec
-        
-        return base_update
+    Implements the generic response wrapper with node-specific result types
+    as specified in Phase 6 of the refactoring plan to eliminate redundant 
+    response patterns. This is a legacy class that will be deprecated in favor
+    of ExecuteToolReturn which merges route_tool + call_tool functionality.
+    """
+    pass
 
 
-class PlanStepReturn(NodeReturnBase):
-    """Return type for plan_step node function."""
+class CallToolReturn(GenericNodeReturn[ExecuteToolResult]):
+    """Return type for call_tool node function using streamlined architecture.
     
-    plan_step_response: Optional[Any] = Field(default=None, description="Plan step response object")
-    tool_signature: Optional[Dict[str, Any]] = Field(default=None, description="Tool signature for execution")
-    
-    def to_state_update(self) -> Dict[str, Any]:
-        """Convert to state update including plan_step specific fields."""
-        base_update = super().to_state_update()
-        base_update.update({
-            "plan_step_response": self.plan_step_response,
-            "tool_signature": self.tool_signature
-        })
-        
-        # Preserve todo_list from state (plan_step doesn't modify it)
-        # Note: This will be handled by LangGraph state preservation
-        
-        return base_update
+    Implements the generic response wrapper with node-specific result types
+    as specified in Phase 6 of the refactoring plan to eliminate redundant 
+    response patterns. This is a legacy class that will be deprecated in favor
+    of ExecuteToolReturn which merges route_tool + call_tool functionality.
+    """
+    pass
 
 
-class RouteToolReturn(NodeReturnBase):
-    """Return type for route_tool node function."""
+class ParseGoalReturn(GenericNodeReturn[ParseGoalResult]):
+    """Return type for parse_goal node function using streamlined architecture.
     
-    route_tool_response: Optional[Any] = Field(default=None, description="Route tool response object")
-    tool_signature: Optional[Dict[str, Any]] = Field(default=None, description="Validated tool signature")
-    
-    def to_state_update(self) -> Dict[str, Any]:
-        """Convert to state update including route_tool specific fields."""
-        base_update = super().to_state_update()
-        base_update.update({
-            "route_tool_response": self.route_tool_response,
-            "tool_signature": self.tool_signature
-        })
-        return base_update
+    Implements the generic response wrapper with node-specific result types
+    as specified in Phase 6 of the refactoring plan to eliminate redundant 
+    response patterns.
+    """
+    pass
 
 
-class CallToolReturn(NodeReturnBase):
-    """Return type for call_tool node function."""
+class PlanStepReturn(GenericNodeReturn[PlanStepResult]):
+    """Return type for plan_step node function using streamlined architecture.
     
-    call_tool_response: Optional[Any] = Field(default=None, description="Call tool response object")
-    
-    def to_state_update(self) -> Dict[str, Any]:
-        """Convert to state update including call_tool specific fields."""
-        base_update = super().to_state_update()
-        base_update.update({
-            "call_tool_response": self.call_tool_response
-        })
-        return base_update
+    Implements the generic response wrapper with node-specific result types
+    as specified in Phase 6 of the refactoring plan to eliminate redundant 
+    response patterns.
+    """
+    pass
 
 
-class ExecuteToolReturn(NodeReturnBase):
-    """Return type for execute_tool node function (merged route_tool + call_tool)."""
+class ExecuteToolReturn(GenericNodeReturn[ExecuteToolResult]):
+    """Return type for execute_tool node function using streamlined architecture.
     
-    execute_tool_response: Optional[Any] = Field(default=None, description="Execute tool response object")
-    tool_signature: Optional[Dict[str, Any]] = Field(default=None, description="Validated tool signature")
-    
-    def to_state_update(self) -> Dict[str, Any]:
-        """Convert to state update including execute_tool specific fields."""
-        base_update = super().to_state_update()
-        base_update.update({
-            "execute_tool_response": self.execute_tool_response,
-            "tool_signature": self.tool_signature
-        })
-        return base_update
+    Implements the generic response wrapper with node-specific result types
+    as specified in Phase 6 of the refactoring plan to eliminate redundant 
+    response patterns. Merges functionality of route_tool + call_tool.
+    """
+    pass
 
 
-class DiagnoseReturn(NodeReturnBase):
-    """Return type for diagnose node function."""
+class EvaluateReturn(GenericNodeReturn[EvaluateResult]):
+    """Return type for evaluate node function using streamlined architecture.
     
-    diagnose_response: Optional[Any] = Field(default=None, description="Diagnose response object")
-    error_context: Optional[ErrorContext] = Field(default=None, description="Error context for diagnosis")
-    
-    def to_state_update(self) -> Dict[str, Any]:
-        """Convert to state update including diagnose specific fields."""
-        base_update = super().to_state_update()
-        base_update.update({
-            "diagnose_response": self.diagnose_response,
-            "error_context": self.error_context
-        })
-        return base_update
+    Implements the generic response wrapper with node-specific result types
+    as specified in Phase 6 of the refactoring plan to eliminate redundant 
+    response patterns.
+    """
+    pass
 
 
-class AnswerReturn(NodeReturnBase):
-    """Return type for answer node function."""
+class DiagnoseReturn(GenericNodeReturn[DiagnoseResult]):
+    """Return type for diagnose node function using streamlined architecture.
     
-    answer_response: Optional[Any] = Field(default=None, description="Answer response object")
-    
-    def to_state_update(self) -> Dict[str, Any]:
-        """Convert to state update including answer specific fields."""
-        base_update = super().to_state_update()
-        base_update.update({
-            "answer_response": self.answer_response
-        })
-        return base_update
+    Implements the generic response wrapper with node-specific result types
+    as specified in Phase 6 of the refactoring plan to eliminate redundant 
+    response patterns.
+    """
+    pass
 
 
-class EvaluateReturn(NodeReturnBase):
-    """Return type for evaluate node function."""
+class AnswerReturn(GenericNodeReturn[AnswerResult]):
+    """Return type for answer node function using streamlined architecture.
     
-    evaluate_response: Optional[Any] = Field(default=None, description="Evaluate response object")
-    
-    def to_state_update(self) -> Dict[str, Any]:
-        """Convert to state update including evaluate specific fields."""
-        base_update = super().to_state_update()
-        base_update.update({
-            "evaluate_response": self.evaluate_response
-        })
-        return base_update
+    Implements the generic response wrapper with node-specific result types
+    as specified in Phase 6 of the refactoring plan to eliminate redundant 
+    response patterns.
+    """
+    pass
 
 
-# Command return types for functions that return Command objects
+class EscalateReturn(GenericNodeReturn[EscalateResult]):
+    """Return type for escalate node function using streamlined architecture.
+    
+    Implements the generic response wrapper with node-specific result types
+    as specified in Phase 6 of the refactoring plan to eliminate redundant 
+    response patterns.
+    """
+    pass
+
+
+# Command return types for functions that return Command objects (streamlined)
 class CommandReturn(BaseModel):
-    """Base class for Command return types."""
+    """Base class for Command return types (streamlined architecture)."""
     
     model_config = {
         "arbitrary_types_allowed": True,
@@ -197,30 +180,33 @@ class CommandReturn(BaseModel):
 
 
 class EvaluateCommandReturn(CommandReturn):
-    """Return type for evaluate node function that returns Command."""
+    """Return type for evaluate node function that returns Command (streamlined)."""
     
     evaluate_response: Optional[Any] = Field(default=None, description="Evaluate response object")
 
 
 class EscalateCommandReturn(CommandReturn):
-    """Return type for escalate node function that returns Command."""
+    """Return type for escalate node function that returns Command (streamlined)."""
     
     escalate_response: Optional[Any] = Field(default=None, description="Escalate response object")
     escalation_context: Optional[EscalateContext] = Field(default=None, description="Escalation context")
 
 
-# Union type for all possible node return types
+# Union type for all possible node return types (streamlined)
 NodeReturn = Union[
     ParseGoalReturn,
     PlanStepReturn,
-    RouteToolReturn,
-    CallToolReturn,
     ExecuteToolReturn,
     DiagnoseReturn,
     AnswerReturn,
     EvaluateCommandReturn,
     EscalateCommandReturn
 ]
+
+
+# Type aliases for specific return patterns (streamlined)
+StateUpdate = Dict[str, Any]
+CommandUpdate = Dict[str, Any]
 
 
 # Type aliases for specific return patterns

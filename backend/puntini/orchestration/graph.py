@@ -282,18 +282,24 @@ def parse_intent(state: State, config: Optional[RunnableConfig] = None, runtime:
         # Convert Pydantic model to dictionary
         state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
+    # Convert artifacts to dictionaries if they are not already
+    artifacts_dicts = [artifact.model_dump() if hasattr(artifact, 'model_dump') else artifact for artifact in response.artifacts]
+    
     # Create the proper return type and convert to state update
     return_obj = ParseGoalReturn(
         current_step=response.current_step,
         current_attempt=response.current_attempt,
         progress=response.progress,
-        artifacts=response.artifacts,
+        artifacts=artifacts_dicts,
         failures=response.failures,
         result=response.result.model_dump() if response.result else None,
-        parse_goal_response=response
+        node_result=response.result.model_dump() if response.result else None
     )
     
-    return return_obj.to_state_update()
+    # Add the response to the state update
+    state_update = return_obj.to_state_update()
+    state_update["parse_intent_response"] = response
+    return state_update
 
 
 def resolve_entities(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
@@ -323,18 +329,24 @@ def resolve_entities(state: State, config: Optional[RunnableConfig] = None, runt
         # Convert Pydantic model to dictionary
         state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
+    # Convert artifacts to dictionaries if they are not already
+    artifacts_dicts = [artifact.model_dump() if hasattr(artifact, 'model_dump') else artifact for artifact in response.artifacts]
+    
     # Create the proper return type and convert to state update
     return_obj = ParseGoalReturn(
         current_step=response.current_step,
         current_attempt=response.current_attempt,
         progress=response.progress,
-        artifacts=response.artifacts,
+        artifacts=artifacts_dicts,
         failures=response.failures,
         result=response.result.model_dump() if response.result else None,
-        parse_goal_response=response
+        node_result=response.result.model_dump() if response.result else None
     )
     
-    return return_obj.to_state_update()
+    # Add the response to the state update
+    state_update = return_obj.to_state_update()
+    state_update["resolve_entities_response"] = response
+    return state_update
 
 
 def disambiguate(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
@@ -364,18 +376,24 @@ def disambiguate(state: State, config: Optional[RunnableConfig] = None, runtime:
         # Convert Pydantic model to dictionary
         state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
+    # Convert artifacts to dictionaries if they are not already
+    artifacts_dicts = [artifact.model_dump() if hasattr(artifact, 'model_dump') else artifact for artifact in response.artifacts]
+    
     # Create the proper return type and convert to state update
     return_obj = ParseGoalReturn(
         current_step=response.current_step,
         current_attempt=response.current_attempt,
         progress=response.progress,
-        artifacts=response.artifacts,
+        artifacts=artifacts_dicts,
         failures=response.failures,
         result=response.result.model_dump() if response.result else None,
-        parse_goal_response=response
+        node_result=response.result.model_dump() if response.result else None
     )
     
-    return return_obj.to_state_update()
+    # Add the response to the state update
+    state_update = return_obj.to_state_update()
+    state_update["disambiguate_response"] = response
+    return state_update
 
 
 def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
@@ -402,18 +420,24 @@ def plan_step(state: State, config: Optional[RunnableConfig] = None, runtime: Op
         # Convert Pydantic model to dictionary
         state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
+    # Convert artifacts to dictionaries if they are not already
+    artifacts_dicts = [artifact.model_dump() if hasattr(artifact, 'model_dump') else artifact for artifact in response.artifacts]
+    
     # Create the proper return type and convert to state update
     return_obj = PlanStepReturn(
         current_step=response.current_step,
         progress=response.progress,
-        artifacts=response.artifacts,
+        artifacts=artifacts_dicts,
         failures=response.failures,
         result=response.result.model_dump() if response.result else None,
-        plan_step_response=response,
+        node_result=response.result.model_dump() if response.result else None,
         tool_signature=response.tool_signature
     )
     
-    return return_obj.to_state_update()
+    # Add the response to the state update
+    state_update = return_obj.to_state_update()
+    state_update["plan_step_response"] = response
+    return state_update
 
 
 def route_tool(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
@@ -443,18 +467,24 @@ def route_tool(state: State, config: Optional[RunnableConfig] = None, runtime: O
         # Convert Pydantic model to dictionary
         state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
+    # Convert artifacts to dictionaries if they are not already
+    artifacts_dicts = [artifact.model_dump() if hasattr(artifact, 'model_dump') else artifact for artifact in response.artifacts]
+    
     # Create the proper return type and convert to state update
     return_obj = RouteToolReturn(
         current_step=response.current_step,
         progress=response.progress,
-        artifacts=response.artifacts,
+        artifacts=artifacts_dicts,
         failures=response.failures,
         result=response.result.model_dump() if response.result else None,
-        route_tool_response=response,
+        node_result=response.result.model_dump() if response.result else None,
         tool_signature=response.tool_signature
     )
     
-    return return_obj.to_state_update()
+    # Add the response to the state update
+    state_update = return_obj.to_state_update()
+    state_update["route_tool_response"] = response
+    return state_update
 
 
 def execute_tool(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
@@ -490,18 +520,24 @@ def execute_tool(state: State, config: Optional[RunnableConfig] = None, runtime:
         # Convert Pydantic model to dictionary
         state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
+    # Convert artifacts to dictionaries if they are not already
+    artifacts_dicts = [artifact.model_dump() if hasattr(artifact, 'model_dump') else artifact for artifact in response.artifacts]
+    
     # Create the proper return type and convert to state update
     return_obj = ExecuteToolReturn(
         current_step=response.current_step,
         progress=response.progress,
-        artifacts=response.artifacts,
+        artifacts=artifacts_dicts,
         failures=response.failures,
         result=response.result.model_dump() if response.result else None,
-        execute_tool_response=response,
+        node_result=response.result.model_dump() if response.result else None,
         tool_signature=response.tool_signature
     )
     
-    return return_obj.to_state_update()
+    # Add the response to the state update
+    state_update = return_obj.to_state_update()
+    state_update["execute_tool_response"] = response
+    return state_update
 
 
 def call_tool(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Dict[str, Any]:
@@ -531,17 +567,23 @@ def call_tool(state: State, config: Optional[RunnableConfig] = None, runtime: Op
         # Convert Pydantic model to dictionary
         state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
+    # Convert artifacts to dictionaries if they are not already
+    artifacts_dicts = [artifact.model_dump() if hasattr(artifact, 'model_dump') else artifact for artifact in response.artifacts]
+    
     # Create the proper return type and convert to state update
     return_obj = CallToolReturn(
         current_step=response.current_step,
         progress=response.progress,
-        artifacts=response.artifacts,
+        artifacts=artifacts_dicts,
         failures=response.failures,
         result=response.result.model_dump() if response.result else None,
-        call_tool_response=response
+        node_result=response.result.model_dump() if response.result else None
     )
     
-    return return_obj.to_state_update()
+    # Add the response to the state update
+    state_update = return_obj.to_state_update()
+    state_update["call_tool_response"] = response
+    return state_update
 
 
 def evaluate(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Command:
@@ -621,18 +663,26 @@ def diagnose(state: State, config: Optional[RunnableConfig] = None, runtime: Opt
         # Convert Pydantic model to dictionary
         state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
+    # Convert artifacts to dictionaries if they are not already
+    artifacts_dicts = [artifact.model_dump() if hasattr(artifact, 'model_dump') else artifact for artifact in response.artifacts]
+    
     # Create the proper return type and convert to state update
     return_obj = DiagnoseReturn(
         current_step=response.current_step,
         progress=response.progress,
-        artifacts=response.artifacts,
+        artifacts=artifacts_dicts,
         failures=response.failures,
         result=response.result.model_dump() if response.result else None,
-        diagnose_response=response,
-        error_context=response.error_context
+        node_result=response.result.model_dump() if response.result else None
     )
     
-    return return_obj.to_state_update()
+    # Add the response to the state update
+    state_update = return_obj.to_state_update()
+    state_update["diagnose_response"] = response
+    # Also add error_context to state if it exists
+    if response.error_context:
+        state_update["error_context"] = response.error_context
+    return state_update
 
 
 def escalate(state: State, config: Optional[RunnableConfig] = None, runtime: Optional[Runtime] = None) -> Command:
@@ -710,17 +760,23 @@ def answer(state: State, config: Optional[RunnableConfig] = None, runtime: Optio
         # Convert Pydantic model to dictionary
         state_dict = state.model_dump() if hasattr(state, 'model_dump') else state.__dict__
     
+    # Convert artifacts to dictionaries if they are not already
+    artifacts_dicts = [artifact.model_dump() if hasattr(artifact, 'model_dump') else artifact for artifact in response.artifacts]
+    
     # Create the proper return type and convert to state update
     return_obj = AnswerReturn(
         current_step=response.current_step,
         progress=response.progress,
-        artifacts=response.artifacts,
+        artifacts=artifacts_dicts,
         failures=response.failures,
         result=response.result.model_dump() if response.result else None,
-        answer_response=response
+        node_result=response.result.model_dump() if response.result else None
     )
     
-    return return_obj.to_state_update()
+    # Add the response to the state update
+    state_update = return_obj.to_state_update()
+    state_update["answer_response"] = response
+    return state_update
 
 
 def create_agent_graph(

@@ -14,6 +14,12 @@ from .context_manager_factory import (
     make_context_manager,
     ContextManagerConfig,
 )
+from .graph_context import (
+    GraphContextManager,
+    ContextAwareEntityMatcher,
+    GraphSubgraph,
+    SubgraphQuery
+)
 
 __all__ = [
     "SimpleContextManager",
@@ -21,4 +27,8 @@ __all__ = [
     "create_simple_context_manager",
     "make_context_manager", 
     "ContextManagerConfig",
+    "GraphContextManager",
+    "ContextAwareEntityMatcher",
+    "GraphSubgraph",
+    "SubgraphQuery"
 ]

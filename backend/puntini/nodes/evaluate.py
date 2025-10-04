@@ -18,8 +18,7 @@ if TYPE_CHECKING:
 from ..logging import get_logger
 from ..models.errors import ValidationError, AgentError
 from ..models.goal_schemas import TodoStatus
-from .message import CallToolResponse
-from .message import EvaluateResponse, EvaluateResult, Failure, Artifact, ErrorContext
+from .message import EvaluateResponse, EvaluateResult, Failure, Artifact, ErrorContext, ExecuteToolResponse
 
 
 def evaluate(
@@ -62,39 +61,56 @@ def evaluate(
     
     logger.info(f"Evaluating state: {state}")
     
-    # Get current step result from call_tool_response
+    # Get current step result from execute_tool_response (merged node from Phase 4)
     if isinstance(state, dict):
-        call_tool_response : CallToolResponse = state.get("call_tool_response")
+        execute_tool_response = state.get("execute_tool_response")
     else:
-        call_tool_response : CallToolResponse = getattr(state, "call_tool_response", None)
-    if not call_tool_response:
-        error_msg = "No call_tool_response found in state for evaluation"
-        logger.error(error_msg)
-        return EvaluateResponse(
-            current_step="diagnose",
-            result=EvaluateResult(
-                status="error",
-                error=error_msg,
-                error_type="validation_error",
-                retry_count=state.get("retry_count", 0) if isinstance(state, dict) else getattr(state, "retry_count", 0),
-                max_retries=state.get("max_retries", 3) if isinstance(state, dict) else getattr(state, "max_retries", 3),
-                evaluation_timestamp=datetime.utcnow().isoformat(),
-                decision_reason="Missing call_tool_response for evaluation"
-            ),
-            error_context=ErrorContext(
-                type="validation_error",
-                message=error_msg,
-                details={"missing_component": "call_tool_response"}
+        execute_tool_response = getattr(state, "execute_tool_response", None)
+    if not execute_tool_response:
+        # Also check for legacy call_tool_response for backward compatibility
+        if isinstance(state, dict):
+            execute_tool_response = state.get("call_tool_response")
+        else:
+            execute_tool_response = getattr(state, "call_tool_response", None)
+        
+        if not execute_tool_response:
+            error_msg = "No execute_tool_response found in state for evaluation (neither execute_tool_response nor legacy call_tool_response)"
+            logger.error(error_msg)
+            return EvaluateResponse(
+                current_step="diagnose",
+                result=EvaluateResult(
+                    status="error",
+                    error=error_msg,
+                    error_type="validation_error",
+                    retry_count=state.get("retry_count", 0) if isinstance(state, dict) else getattr(state, "retry_count", 0),
+                    max_retries=state.get("max_retries", 3) if isinstance(state, dict) else getattr(state, "max_retries", 3),
+                    evaluation_timestamp=datetime.utcnow().isoformat(),
+                    decision_reason="Missing execute_tool_response for evaluation"
+                ),
+                error_context=ErrorContext(
+                    type="validation_error",
+                    message=error_msg,
+                    details={"missing_component": "execute_tool_response"}
+                )
             )
-        )
     
-    # Extract result information
-    result = call_tool_response.result
-    tool_name = result.tool_name
-    execution_status = result.status
-    execution_time = result.execution_time
-    error = result.error
-    error_type = result.error_type
+    # Extract result information - using ExecuteToolResponse structure
+    result = execute_tool_response.result
+    tool_name = result.tool_name if hasattr(result, 'tool_name') else None
+    execution_status = result.status if hasattr(result, 'status') else getattr(result, 'status', 'unknown')
+    execution_time = result.execution_time if hasattr(result, 'execution_time') else getattr(result, 'execution_time', 0.0)
+    error = result.error if hasattr(result, 'error') else getattr(result, 'error', None)
+    error_type = result.error_type if hasattr(result, 'error_type') else getattr(result, 'error_type', None)
+    
+    # If tool_name is still None, try to get it from the tool_signature in state
+    if not tool_name and isinstance(state, dict):
+        tool_signature = state.get("tool_signature")
+        if tool_signature and isinstance(tool_signature, dict):
+            tool_name = tool_signature.get("tool_name")
+    elif not tool_name and hasattr(state, 'tool_signature'):
+        tool_signature = getattr(state, 'tool_signature', None)
+        if tool_signature and hasattr(tool_signature, 'tool_name'):
+            tool_name = tool_signature.tool_name
     
     # Get current retry information
     if isinstance(state, dict):

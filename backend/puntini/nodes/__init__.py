@@ -28,6 +28,32 @@ from .message import (
     Artifact, Failure, ErrorContext, EscalateContext, NodeResponse
 )
 
+# Import streamlined response architecture (Phase 6)
+from .streamlined_message import (
+    # Streamlined response classes
+    GenericNodeResponse,
+    ParseGoalResponse as StreamlinedParseGoalResponse,
+    PlanStepResponse as StreamlinedPlanStepResponse,
+    ExecuteToolResponse as StreamlinedExecuteToolResponse,
+    EvaluateResponse as StreamlinedEvaluateResponse,
+    DiagnoseResponse as StreamlinedDiagnoseResponse,
+    AnswerResponse as StreamlinedAnswerResponse,
+    EscalateResponse as StreamlinedEscalateResponse,
+    # Streamlined result classes
+    ParseGoalResult as StreamlinedParseGoalResult,
+    PlanStepResult as StreamlinedPlanStepResult,
+    ExecuteToolResult as StreamlinedExecuteToolResult,
+    EvaluateResult as StreamlinedEvaluateResult,
+    DiagnoseResult as StreamlinedDiagnoseResult,
+    AnswerResult as StreamlinedAnswerResult,
+    EscalateResult as StreamlinedEscalateResult,
+    # Supporting classes
+    EscalateContext as StreamlinedEscalateContext,
+    Artifact as StreamlinedArtifact,
+    Failure as StreamlinedFailure,
+    ErrorContext as StreamlinedErrorContext
+)
+
 __all__ = [
     # Node functions
     "parse_goal",
@@ -74,4 +100,25 @@ __all__ = [
     "ErrorContext",
     "EscalateContext",
     "NodeResponse",
+    
+    # Streamlined response architecture (Phase 6)
+    "GenericNodeResponse",
+    "StreamlinedParseGoalResponse",
+    "StreamlinedPlanStepResponse", 
+    "StreamlinedExecuteToolResponse",
+    "StreamlinedEvaluateResponse",
+    "StreamlinedDiagnoseResponse",
+    "StreamlinedAnswerResponse",
+    "StreamlinedEscalateResponse",
+    "StreamlinedParseGoalResult",
+    "StreamlinedPlanStepResult",
+    "StreamlinedExecuteToolResult",
+    "StreamlinedEvaluateResult",
+    "StreamlinedDiagnoseResult",
+    "StreamlinedAnswerResult",
+    "StreamlinedEscalateResult",
+    "StreamlinedEscalateContext",
+    "StreamlinedArtifact",
+    "StreamlinedFailure",
+    "StreamlinedErrorContext"
 ]

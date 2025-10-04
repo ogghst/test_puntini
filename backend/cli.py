@@ -12,7 +12,6 @@ from typing import Any, Dict
 # Note: Path modification removed to avoid import conflicts
 # The CLI should be run as a module: python -m puntini.cli
 
-from puntini.agents.agent_factory import create_simple_agent, create_agent_with_components
 from puntini.utils.settings import settings
 from langfuse.langchain import CallbackHandler
 from langfuse import Langfuse
@@ -144,7 +143,9 @@ def run(goal: str, config: str | None, verbose: bool, tracer: str):
     from puntini.context.context_manager_factory import create_simple_context_manager
     from puntini.tools.tool_setup import create_tool_registry_with_validation
     from puntini.observability.tracer_factory import create_console_tracer
-    from puntini import create_agent_with_components, create_initial_state
+    from puntini.orchestration.graph import create_agent_graph
+    from puntini.orchestration.state_schema import State
+    from puntini.llm.llm_models import LLMFactory
     
     # Create all required components
     graph_store = create_memory_graph_store()
@@ -152,22 +153,45 @@ def run(goal: str, config: str | None, verbose: bool, tracer: str):
     tool_registry = create_tool_registry_with_validation()
     tracer = create_console_tracer()
     
-    # Create agent with components
-    agent = create_agent_with_components(
+    # Create LLM for the graph context
+    llm_factory = LLMFactory()
+    llm = llm_factory.get_default_llm()
+    
+    # Create agent with the refactored graph
+    agent = create_agent_graph(
+        tracer=tracer
+    )
+    
+    # Create proper initial state with all components for the refactored schema
+    initial_state = State(
+        session_id=str(uuid.uuid4()),
+        current_node="parse_intent",
+        goal=goal,
+        messages=[],
+        artifacts=[],
+        failures=[],
+        progress=[],
+        todo_list=[],
+        retry_count=0,
+        max_retries=settings.max_retries,
+        result=None,
+        current_step="parse_intent",
+        current_attempt=1,
+        parse_intent_response=None,
+        resolve_entities_response=None,
+        disambiguate_response=None,
+        plan_step_response=None,
+        execute_tool_response=None,
+        evaluate_response=None,
+        diagnose_response=None,
+        escalate_response=None,
+        answer_response=None,
+        tool_signature=None,
+        # Services for components access
         graph_store=graph_store,
         context_manager=context_manager,
         tool_registry=tool_registry,
         tracer=tracer
-    )
-    
-    # Create proper initial state with all components
-    initial_state = create_initial_state(
-        goal=goal,
-        graph_store=graph_store,
-        context_manager=context_manager,
-        tool_registry=tool_registry,
-        tracer=tracer,
-        max_retries=settings.max_retries
     )
     
     # Run the agent
@@ -194,10 +218,11 @@ def run(goal: str, config: str | None, verbose: bool, tracer: str):
         langfuse_handler = CallbackHandler()
         thread_id = str(uuid.uuid4())
         
-        # Create LLM for the graph context
-        from puntini.llm.llm_models import LLMFactory
-        llm_factory = LLMFactory()
-        llm = llm_factory.get_default_llm()
+        config = {
+            "configurable": {"thread_id": thread_id}, 
+            "callbacks": [langfuse_handler],
+            "recursion_limit": 100  # Increase from default 25 to 100
+        }
         
         # Pass LLM and components through context
         context = {
@@ -207,13 +232,26 @@ def run(goal: str, config: str | None, verbose: bool, tracer: str):
             "tool_registry": tool_registry,
             "tracer": tracer
         }
-        config = {
-            "configurable": {"thread_id": thread_id}, 
-            "callbacks": [langfuse_handler],
-            "recursion_limit": 100  # Increase from default 25 to 100
-        }
         
-        result = agent.invoke(initial_state, config=config, context=context)
+        # Run the agent with potential for human-in-the-loop interaction
+        # The escalate node uses interrupt() to pause execution for user feedback
+        result = agent.invoke(initial_state, context=context, config=config)
+        
+        # In a more sophisticated implementation, you would handle the interrupt
+        # and allow user feedback before continuing, like this:
+        # 
+        # for event in agent.stream(initial_state, config=config):
+        #     if "__interrupt__" in event:
+        #         # Human-in-the-loop: get user input
+        #         user_input = input("Agent needs your input: ")
+        #         # Resume execution with user feedback
+        #         result = agent.invoke(
+        #             {"user_feedback": user_input},
+        #             config=get_checkpoint_config(thread_id)
+        #         )
+        #         break
+        # else:
+        #     result = event  # Final result when no interruption occurs
         click.echo(f"✅ Agent completed successfully!")
         if verbose:
             click.echo(f"Result: {result}")
@@ -250,9 +288,22 @@ def test():
     click.echo("🧪 Running basic tests...")
     
     try:
-        # Test agent creation
-        agent = create_simple_agent()
-        click.echo("✅ Agent creation: PASSED")
+        # Test graph creation with new architecture
+        from puntini.orchestration.graph import create_agent_graph
+        from puntini.graph.graph_store_factory import create_memory_graph_store
+        from puntini.context.context_manager_factory import create_simple_context_manager
+        from puntini.tools.tool_setup import create_tool_registry_with_validation
+        from puntini.observability.tracer_factory import create_console_tracer
+        
+        # Create components
+        graph_store = create_memory_graph_store()
+        context_manager = create_simple_context_manager()
+        tool_registry = create_tool_registry_with_validation()
+        tracer = create_console_tracer()
+        
+        # Create agent with the refactored graph
+        agent = create_agent_graph(tracer=tracer)
+        click.echo("✅ Agent graph creation: PASSED")
         
         # Test tracer creation
         from puntini.observability.tracer_factory import create_langfuse_tracer
@@ -260,7 +311,6 @@ def test():
         click.echo("✅ Tracer creation: PASSED")
         
         # Test graph store creation
-        from puntini.graph.graph_store_factory import create_memory_graph_store
         graph_store = create_memory_graph_store()
         click.echo("✅ Graph store creation: PASSED")
         

@@ -60,14 +60,23 @@ class TestResolveEntitiesNode:
         )
         
         # Mock resolved goal spec
-        mock_resolved_goal = ResolvedGoalSpec(
-            intent_spec=self.mock_intent_spec,
-            entities=[mock_resolved_entity],
-            ambiguities=[],
-            ready_to_execute=True
-        )
+        mock_resolved_goal = MagicMock(spec=ResolvedGoalSpec)
+        mock_resolved_goal.entities = [mock_resolved_entity]
+        mock_resolved_goal.ambiguities = []
+        mock_resolved_goal.ready_to_execute = True
+        mock_resolved_goal.has_ambiguities.return_value = False
+        mock_resolved_goal.model_dump.return_value = {
+            "intent_spec": self.mock_intent_spec.model_dump(),
+            "entities": [mock_resolved_entity.model_dump()],
+            "ambiguities": [],
+            "ready_to_execute": True
+        }
         
         self.mock_llm.with_structured_output.return_value.invoke.return_value = mock_resolved_goal
+        
+        # Ensure the mock's entities attribute is a list
+        self.mock_llm.with_structured_output.return_value.invoke.return_value.entities = mock_resolved_goal.entities
+        self.mock_llm.with_structured_output.return_value.invoke.return_value.ambiguities = mock_resolved_goal.ambiguities
         
         # Call the function
         result = resolve_entities(self.valid_state, runtime=self.mock_runtime)
@@ -109,14 +118,23 @@ class TestResolveEntitiesNode:
         )
         
         # Mock resolved goal spec with ambiguities
-        mock_resolved_goal = ResolvedGoalSpec(
-            intent_spec=self.mock_intent_spec,
-            entities=[mock_resolved_entity],
-            ambiguities=[mock_ambiguity],
-            ready_to_execute=False
-        )
+        mock_resolved_goal = MagicMock(spec=ResolvedGoalSpec)
+        mock_resolved_goal.entities = [mock_resolved_entity]
+        mock_resolved_goal.ambiguities = [mock_ambiguity]
+        mock_resolved_goal.ready_to_execute = False
+        mock_resolved_goal.has_ambiguities.return_value = True
+        mock_resolved_goal.model_dump.return_value = {
+            "intent_spec": self.mock_intent_spec.model_dump(),
+            "entities": [mock_resolved_entity.model_dump()],
+            "ambiguities": [mock_ambiguity.model_dump()],
+            "ready_to_execute": False
+        }
         
         self.mock_llm.with_structured_output.return_value.invoke.return_value = mock_resolved_goal
+        
+        # Ensure the mock's entities attribute is a list
+        self.mock_llm.with_structured_output.return_value.invoke.return_value.entities = mock_resolved_goal.entities
+        self.mock_llm.with_structured_output.return_value.invoke.return_value.ambiguities = mock_resolved_goal.ambiguities
         
         # Call the function
         result = resolve_entities(self.valid_state, runtime=self.mock_runtime)
@@ -136,13 +154,9 @@ class TestResolveEntitiesNode:
             "parse_goal_response": None
         }
         
-        result = resolve_entities(state_no_parse, runtime=self.mock_runtime)
-        
         # Verify error handling
-        assert result.current_step == "escalate"
-        assert result.result.status == "error"
-        assert result.result.retryable is False
-        assert "No parsed intent found" in result.result.error
+        with pytest.raises(ValidationError, match="No parsed intent found"):
+            resolve_entities(state_no_parse, runtime=self.mock_runtime)
     
     def test_resolve_entities_invalid_parse_response(self):
         """Test handling when parse response is invalid."""
@@ -156,13 +170,9 @@ class TestResolveEntitiesNode:
             "parse_goal_response": mock_invalid_response
         }
         
-        result = resolve_entities(state_invalid_parse, runtime=self.mock_runtime)
-        
         # Verify error handling
-        assert result.current_step == "escalate"
-        assert result.result.status == "error"
-        assert result.result.retryable is False
-        assert "No parsed intent data found" in result.result.error
+        with pytest.raises(ValidationError, match="No parsed intent data found"):
+            resolve_entities(state_invalid_parse, runtime=self.mock_runtime)
     
     def test_resolve_entities_no_llm_in_context(self):
         """Test handling when LLM is not in runtime context."""
@@ -185,14 +195,23 @@ class TestResolveEntitiesNode:
         mock_runtime_no_graph.context = {"llm": self.mock_llm}
         
         # Mock resolved goal spec
-        mock_resolved_goal = ResolvedGoalSpec(
-            intent_spec=self.mock_intent_spec,
-            entities=[],
-            ambiguities=[],
-            ready_to_execute=True
-        )
+        mock_resolved_goal = MagicMock(spec=ResolvedGoalSpec)
+        mock_resolved_goal.entities = []
+        mock_resolved_goal.ambiguities = []
+        mock_resolved_goal.ready_to_execute = True
+        mock_resolved_goal.has_ambiguities.return_value = False
+        mock_resolved_goal.model_dump.return_value = {
+            "intent_spec": self.mock_intent_spec.model_dump(),
+            "entities": [],
+            "ambiguities": [],
+            "ready_to_execute": True
+        }
         
         self.mock_llm.with_structured_output.return_value.invoke.return_value = mock_resolved_goal
+        
+        # Ensure the mock's entities attribute is a list
+        self.mock_llm.with_structured_output.return_value.invoke.return_value.entities = mock_resolved_goal.entities
+        self.mock_llm.with_structured_output.return_value.invoke.return_value.ambiguities = mock_resolved_goal.ambiguities
         
         # Call the function
         result = resolve_entities(self.valid_state, runtime=mock_runtime_no_graph)
@@ -231,14 +250,23 @@ class TestResolveEntitiesNode:
     def test_resolve_entities_no_entities_resolved(self):
         """Test handling when no entities are resolved."""
         # Mock resolved goal spec with no entities
-        mock_resolved_goal = ResolvedGoalSpec(
-            intent_spec=self.mock_intent_spec,
-            entities=[],  # No entities resolved
-            ambiguities=[],
-            ready_to_execute=False
-        )
+        mock_resolved_goal = MagicMock(spec=ResolvedGoalSpec)
+        mock_resolved_goal.entities = []
+        mock_resolved_goal.ambiguities = []
+        mock_resolved_goal.ready_to_execute = False
+        mock_resolved_goal.has_ambiguities.return_value = False
+        mock_resolved_goal.model_dump.return_value = {
+            "intent_spec": self.mock_intent_spec.model_dump(),
+            "entities": [],
+            "ambiguities": [],
+            "ready_to_execute": False
+        }
         
         self.mock_llm.with_structured_output.return_value.invoke.return_value = mock_resolved_goal
+        
+        # Ensure the mock's entities attribute is a list
+        self.mock_llm.with_structured_output.return_value.invoke.return_value.entities = mock_resolved_goal.entities
+        self.mock_llm.with_structured_output.return_value.invoke.return_value.ambiguities = mock_resolved_goal.ambiguities
         
         result = resolve_entities(self.valid_state, runtime=self.mock_runtime)
         
@@ -259,12 +287,17 @@ class TestResolveEntitiesNode:
         
         for has_ambiguities, ready_to_execute, expected_route in test_cases:
             # Mock resolved goal spec
-            mock_resolved_goal = ResolvedGoalSpec(
-                intent_spec=self.mock_intent_spec,
-                entities=[],
-                ambiguities=[Mock()] if has_ambiguities else [],
-                ready_to_execute=ready_to_execute
-            )
+            mock_resolved_goal = MagicMock(spec=ResolvedGoalSpec)
+            mock_resolved_goal.entities = []
+            mock_resolved_goal.ambiguities = [Mock()] if has_ambiguities else []
+            mock_resolved_goal.ready_to_execute = ready_to_execute
+            mock_resolved_goal.has_ambiguities.return_value = has_ambiguities
+            mock_resolved_goal.model_dump.return_value = {
+                "intent_spec": self.mock_intent_spec.model_dump(),
+                "entities": [],
+                "ambiguities": [Mock()] if has_ambiguities else [],
+                "ready_to_execute": ready_to_execute
+            }
             
             self.mock_llm.with_structured_output.return_value.invoke.return_value = mock_resolved_goal
             
@@ -285,14 +318,23 @@ class TestResolveEntitiesNode:
             is_new=False
         )
         
-        mock_resolved_goal = ResolvedGoalSpec(
-            intent_spec=self.mock_intent_spec,
-            entities=[mock_resolved_entity],
-            ambiguities=[],
-            ready_to_execute=True
-        )
+        mock_resolved_goal = MagicMock(spec=ResolvedGoalSpec)
+        mock_resolved_goal.entities = [mock_resolved_entity]
+        mock_resolved_goal.ambiguities = []
+        mock_resolved_goal.ready_to_execute = True
+        mock_resolved_goal.has_ambiguities.return_value = False
+        mock_resolved_goal.model_dump.return_value = {
+            "intent_spec": self.mock_intent_spec.model_dump(),
+            "entities": [mock_resolved_entity.model_dump()],
+            "ambiguities": [],
+            "ready_to_execute": True
+        }
         
         self.mock_llm.with_structured_output.return_value.invoke.return_value = mock_resolved_goal
+        
+        # Ensure the mock's entities attribute is a list
+        self.mock_llm.with_structured_output.return_value.invoke.return_value.entities = mock_resolved_goal.entities
+        self.mock_llm.with_structured_output.return_value.invoke.return_value.ambiguities = mock_resolved_goal.ambiguities
         
         # Call the function
         result = resolve_entities(self.valid_state, runtime=self.mock_runtime)
@@ -304,14 +346,23 @@ class TestResolveEntitiesNode:
     def test_resolve_entities_artifacts_and_failures(self):
         """Test that artifacts and failures are properly handled."""
         # Mock resolved goal spec
-        mock_resolved_goal = ResolvedGoalSpec(
-            intent_spec=self.mock_intent_spec,
-            entities=[],
-            ambiguities=[],
-            ready_to_execute=True
-        )
+        mock_resolved_goal = MagicMock(spec=ResolvedGoalSpec)
+        mock_resolved_goal.entities = []
+        mock_resolved_goal.ambiguities = []
+        mock_resolved_goal.ready_to_execute = True
+        mock_resolved_goal.has_ambiguities.return_value = False
+        mock_resolved_goal.model_dump.return_value = {
+            "intent_spec": self.mock_intent_spec.model_dump(),
+            "entities": [],
+            "ambiguities": [],
+            "ready_to_execute": True
+        }
         
         self.mock_llm.with_structured_output.return_value.invoke.return_value = mock_resolved_goal
+        
+        # Ensure the mock's entities attribute is a list
+        self.mock_llm.with_structured_output.return_value.invoke.return_value.entities = mock_resolved_goal.entities
+        self.mock_llm.with_structured_output.return_value.invoke.return_value.ambiguities = mock_resolved_goal.ambiguities
         
         # Call the function
         result = resolve_entities(self.valid_state, runtime=self.mock_runtime)

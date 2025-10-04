@@ -17,7 +17,9 @@ if TYPE_CHECKING:
 from ..interfaces.tool_registry import ToolRegistry
 from ..models.errors import ValidationError, NotFoundError, ToolError
 from ..logging import get_logger
+# Import both legacy and streamlined architectures for gradual migration
 from .message import ExecuteToolResponse, ExecuteToolResult, Artifact, ErrorContext
+from .streamlined_message import GenericNodeResponse, ExecuteToolResult as StreamlinedExecuteToolResult
 
 logger = get_logger(__name__)
 
